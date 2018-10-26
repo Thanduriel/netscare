@@ -15,6 +15,8 @@ add_executable(netscare ${SOURCE_FILES})
 
 add_executable(demo WIN32 demo/X11FullScreen.cpp)
 
+target_link_libraries(netscare d3d11)
+
 # detours
 include_directories("dependencies/detours/src")
 #file(GLOB SOURCE_FILES_DETOURS "dependencies/detours/src/*.cpp")

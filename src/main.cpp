@@ -1,6 +1,5 @@
 #include <windows.h>
 #include <stdio.h>
-#include <detours.h>
 #include <d3d.h>
 #include <d3d11.h>
 #include <iostream>
@@ -33,6 +32,12 @@ using namespace std;
 
 HRESULT __stdcall Present(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 {
+	MessageBox(
+		NULL,
+		(LPCSTR)"Resource not available\nDo you want to try again?",
+		(LPCSTR)"Account Details",
+		MB_ICONWARNING | MB_CANCELTRYCONTINUE | MB_DEFBUTTON2
+	);
 	std::cout << "test\n";
 	if (firstTime)
 	{
@@ -85,10 +90,27 @@ bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
 	if (!pSwapChain) return false;
 
 	//HOOKING PRESENT
-	DetourTransactionBegin();
-	DetourUpdateThread(GetCurrentThread());
-	DetourAttach(reinterpret_cast<PVOID*>(reinterpret_cast<DWORD*>(pSwapChain) + 8), Present);
-	auto error = DetourTransactionCommit();
+	// DetourTransactionBegin();
+	// DetourUpdateThread(GetCurrentThread());
+	// DetourAttach(reinterpret_cast<PVOID*>(reinterpret_cast<DWORD*>(pSwapChain) + 8), Present);
+	// reinterpret_cast<DWORD*>(pSwapChain)[8] = (DWORD)Present;
+	//(*reinterpret_cast<DWORD**>(pSwapChain))[8] = (DWORD)Present;
+	// (*((DWORD_PTR**)pSwapChain))[8] = (DWORD_PTR)Present;
+	int dwIndex = 0;
+	PDWORD pdwVMT = *(reinterpret_cast<DWORD_PTR**>(pSwapChain));
+	for (dwIndex = 0; pdwVMT[dwIndex]; ++dwIndex) {
+		if (IsBadCodePtr((FARPROC)pdwVMT[dwIndex]))
+		{
+			break;
+		}
+	}
+	std::cout << "Size " << dwIndex << std::endl;
+	MEMORY_BASIC_INFORMATION memInfo;
+	SIZE_T size;
+	VirtualQuery(pdwVMT, &memInfo, 8 * sizeof(DWORD));
+	std::cout << "memInfo:\nBaseAddr\t" << memInfo.BaseAddress << "\nAllocBase\t" << memInfo.AllocationBase << "\nAllocProtecte\t" << memInfo.AllocationProtect << "\nSize\t"
+		<< memInfo.RegionSize << "\nState\t" << memInfo.State << "\nProtect\t" << memInfo.Protect << "\nType\t" << memInfo.Type << "\n";
+	// pdwVMT[8] = (DWORD)Present;
 //	CVMTHook* VMTSwapChainHook = new CVMTHook((DWORD_PTR**)pSwapChain);
 //	pPresent = (D3D11PresentHook)VMTSwapChainHook->HookMethod((DWORD_PTR)Present, 8);
 
@@ -184,13 +206,123 @@ bool FindSwapChain()
 					continue;
 				else
 				{
-					cout << "" << endl;
+					cout << "\nFound It\n" << endl;
 					return hookD3D11Present((IDXGISwapChain*)current);    //If found we hook Present in swapChain
 				}
 			}
 		}
 	}
 	return true;
+}
+
+
+
+#include <Windows.h>
+#include <iostream>
+#include <string>
+#include <tlhelp32.h>
+#include <Psapi.h>
+#include <tchar.h>
+
+int getPID(const std::string& name);
+DWORD64 GetModule(HANDLE hProcess, const std::string& name);
+
+// Stolen from: https://docs.microsoft.com/en-gb/windows/desktop/SecAuthZ/enabling-and-disabling-privileges-in-c--
+BOOL SetPrivilege(
+	HANDLE hToken,          // access token handle
+	LPCTSTR lpszPrivilege,  // name of privilege to enable/disable
+	BOOL bEnablePrivilege   // to enable or disable privilege
+)
+{
+	TOKEN_PRIVILEGES tp;
+	LUID luid;
+
+	if (!LookupPrivilegeValue(
+		NULL,            // lookup privilege on local system
+		lpszPrivilege,   // privilege to lookup 
+		&luid))        // receives LUID of privilege
+	{
+		printf("LookupPrivilegeValue error: %u\n", GetLastError());
+		return FALSE;
+	}
+
+	tp.PrivilegeCount = 1;
+	tp.Privileges[0].Luid = luid;
+	if (bEnablePrivilege)
+		tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+	else
+		tp.Privileges[0].Attributes = 0;
+
+	// Enable the privilege or disable all privileges.
+
+	if (!AdjustTokenPrivileges(
+		hToken,
+		FALSE,
+		&tp,
+		sizeof(TOKEN_PRIVILEGES),
+		(PTOKEN_PRIVILEGES)NULL,
+		(PDWORD)NULL))
+	{
+		printf("AdjustTokenPrivileges error: %u\n", GetLastError());
+		return FALSE;
+	}
+
+	if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
+
+	{
+		printf("The token does not have the specified privilege. \n");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+constexpr const char* theProcess = "demo.exe";
+
+
+int getPID(const std::string& name)
+{
+	PROCESSENTRY32 entry;
+	entry.dwSize = sizeof(PROCESSENTRY32);
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
+
+	if (!Process32First(snapshot, &entry)) return NULL;
+
+	do
+	{
+		if (strcmp(entry.szExeFile, name.c_str()) == 0)
+		{
+			CloseHandle(snapshot);
+			return entry.th32ProcessID;
+		}
+	} while (Process32Next(snapshot, &entry));
+
+	CloseHandle(snapshot);
+	return NULL;
+}
+
+DWORD64 GetModule(HANDLE hProcess, const std::string& name)
+{
+	HMODULE hMods[1024];
+	DWORD cbNeeded;
+
+	if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded))
+	{
+		for (int i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+		{
+			TCHAR szModName[MAX_PATH];
+			if (GetModuleFileNameEx(hProcess, hMods[i], szModName, sizeof(szModName) / sizeof(TCHAR)))
+			{
+				std::string modName = szModName;
+				if (modName.find(name) != std::string::npos)
+				{
+					return (DWORD64)hMods[i];
+				}
+			}
+		}
+	}
+	return NULL;
 }
 
 int __cdecl main(void)
@@ -218,8 +350,76 @@ int __cdecl main(void)
 		printf("CreateProcess failed (%d).\n", GetLastError());
 		return 0;
 	}
+	printf("Create Process succsess");
+
+	HANDLE hToken;
+	BOOL ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &hToken);
+	if (!ok)
+	{
+		std::cout << "OpenProcessToken failed, error " << GetLastError() << "\n";
+		return 255;
+	}
+
+	ok = SetPrivilege(hToken, SE_DEBUG_NAME, TRUE);
+	if (!ok)
+	{
+		CloseHandle(hToken);
+		return 1;
+	}
+
+	int pid = getPID(theProcess);
+
+	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+	if (hProcess == NULL)
+	{
+		std::cout << "OpenProcess failed, error " << GetLastError() << "\n";
+		CloseHandle(hToken);
+		return 1;
+	}
+
+	DWORD64 baseAddress = GetModule(hProcess, theProcess);
+	std::cout << "Base Address: " << std::hex << std::uppercase << "0x" << baseAddress << "\n";
+	int buffer = 0;  // Note: sizeof (buffer) below, not sizeof (&buffer)
+	ok = ReadProcessMemory(hProcess, (LPCVOID)baseAddress, (LPVOID)&buffer, sizeof(buffer), NULL);
+	if (ok)
+	{
+		std::cout << "ReadProcessMemory succeeded, buffer = " << buffer << "\n";
+		system("pause");
+		return 0;
+	}
+	else {
+		std::cout << "Read Errir, error " << GetLastError() << "\n";
+		system("pause");
+	}
+	ok = WriteProcessMemory(hProcess, (LPVOID)baseAddress, (LPVOID)&buffer, sizeof(buffer), NULL);
+
+	if (ok)
+	{
+		std::cout << "Write succeeded\n";
+		system("pause");
+		return 0;
+	}
+	else {
+		std::cout << "Write Errir, error " << GetLastError() << "\n";
+		system("pause");
+	}
 
 	FindSwapChain();
 
+	WaitForSingleObject(pi.hProcess, INFINITE);
+
+	DWORD exitCode;
+	BOOL result = GetExitCodeProcess(pi.hProcess, &exitCode);
+
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	CloseHandle(hProcess);
+	CloseHandle(hToken);
+	
+	if (!result) {
+		printf("Can't get exitCode from Process\n");
+		return 1;
+	}
+	printf("ExitCode: %d", exitCode);
 	return 0;
 }

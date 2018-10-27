@@ -11,14 +11,16 @@ include(FindDirectX.cmake)
 
 include_directories(${DirectX_XYZ_INCLUDE_DIR})
 
-add_executable(netscare ${SOURCE_FILES})
+add_library(netscare SHARED ${SOURCE_FILES})
+target_link_libraries(netscare d3d11)
+
+add_executable(injector injector/main.cpp)
+target_link_libraries(injector netscare)
 
 add_executable(demo WIN32 demo/X11FullScreen.cpp)
 
-target_link_libraries(netscare d3d11)
-
 # detours
-include_directories("dependencies/detours/src")
+#include_directories("dependencies/detours/src")
 #file(GLOB SOURCE_FILES_DETOURS "dependencies/detours/src/*.cpp")
 
 add_library(detours STATIC dependencies/detours/src/detours.cpp 
@@ -29,4 +31,4 @@ add_library(detours STATIC dependencies/detours/src/detours.cpp
 	dependencies/detours/src/disolx86.cpp 
 	dependencies/detours/src/disolx64.cpp 
 	dependencies/detours/src/disolia64.cpp)
-target_link_libraries (netscare detours)
+#target_link_libraries (netscare detours)

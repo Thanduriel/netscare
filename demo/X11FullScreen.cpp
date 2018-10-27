@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <d3d11.h>
+#include <iostream>
+#include <string>
 
 // include the Direct3D Library file
 #pragma comment (lib, "d3d11.lib")
@@ -142,6 +144,8 @@ void InitD3D(HWND hWnd)
 		NULL,
 		&devcon);
 
+	static std::string swapChainAdr = std::to_string(reinterpret_cast<DWORD>(swapchain));
+	SetWindowText(hWnd, swapChainAdr.c_str());
 
 	// get the address of the back buffer
 	ID3D11Texture2D *pBackBuffer;

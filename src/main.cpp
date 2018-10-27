@@ -1,82 +1,23 @@
+#include "renderer.hpp"
+#include "hook.hpp"
+#include "interface.hpp"
+
 #include <windows.h>
 #include <stdio.h>
-#include <detours.h>
 #include <d3d.h>
 #include <d3d11.h>
 #include <iostream>
-
-typedef HRESULT(__stdcall *D3D11PresentHook) (IDXGISwapChain* This, UINT SyncInterval, UINT Flags);
-D3D11PresentHook D3D11Present = nullptr;
-
-
-ID3D11Device* m_pDevice = nullptr;
-ID3D11DeviceContext* m_pContext = nullptr;
-IDXGISwapChain* m_pSwapChain = nullptr;
-
-DWORD_PTR* m_pSwapChainVtable = NULL;
-DWORD_PTR dwVTableAddress = NULL;
-
-D3D11PresentHook pPresent = NULL;
+#include <fstream>
 
 bool firstTime = true;
 
-void DrawString(char* text, float size, int x, int y, int color)
-{
-	//CONVERTING CHAR* TO CONST WCHAR*
-	const WCHAR *pwcsName;
-	int nChars = MultiByteToWideChar(CP_ACP, 0, text, -1, NULL, 0);
-	pwcsName = new WCHAR[nChars];
-	MultiByteToWideChar(CP_ACP, 0, text, -1, (LPWSTR)pwcsName, nChars);
-}
-
 using namespace std;
-
-HRESULT __stdcall Present(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
-{
-	std::cout << "test\n";
-	if (firstTime)
-	{
-		__asm
-		{
-			push eax
-			mov eax, [ebp + 8]
-			mov This, eax
-			pop eax
-		}
-
-		//GET DEVICE
-		This->GetDevice(__uuidof(ID3D11Device), (void**)&m_pDevice);
-
-		//CHECKING IF DEVICE IS VALID
-		cout << "New m_pDevice:			0x" << hex << m_pDevice << endl;
-		if (!m_pDevice) return false;
-
-		//REPLACING CONTEXT
-		m_pDevice->GetImmediateContext(&m_pContext);
-
-		//CHECKING IF CONTEXT IS VALID
-		cout << "New m_pContext:			0x" << hex << m_pContext << endl;
-		if (!m_pContext) return false;
-
-		cout << "" << endl;
-
-		m_pDevice->Release();
-		cout << "m_pDevice released" << endl;
-
-		m_pContext->Release();
-		cout << "m_pContext released" << endl;
-
-		m_pSwapChain->Release();
-		cout << "m_pSwapChain released" << endl;
-
-		firstTime = false;
-	}
-	DrawString("DirectX Hook", 70, 20, 20, 0xffff1612);
-	return pPresent(This, SyncInterval, Flags);
-}
 
 bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
 {
+//	DXGI_FRAME_STATISTICS stats;
+//	pSwapChain->GetFrameStatistics(&stats);
+	
 	cout << "Hooking Present" << endl;
 	cout << "" << endl;
 
@@ -85,77 +26,24 @@ bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
 	if (!pSwapChain) return false;
 
 	//HOOKING PRESENT
-	DetourTransactionBegin();
-	DetourUpdateThread(GetCurrentThread());
-	DetourAttach(reinterpret_cast<PVOID*>(reinterpret_cast<DWORD*>(pSwapChain) + 8), Present);
-	auto error = DetourTransactionCommit();
-//	CVMTHook* VMTSwapChainHook = new CVMTHook((DWORD_PTR**)pSwapChain);
-//	pPresent = (D3D11PresentHook)VMTSwapChainHook->HookMethod((DWORD_PTR)Present, 8);
+	PresentVTableHook* hook = new PresentVTableHook(pSwapChain);
+	hook->AddHook(Device::Present, 8);
 
-	cout << "pPresent:			0x" << hex << pPresent << endl;
-	//CHECKING IF PRESENT IS VALID
-	if (!pPresent) return false;
 	return true;
 }
 
-bool __stdcall CreateDeviceAndSwapChain()
-{
-	system("Color 2");
-	cout << "Creating Device & Swapchain" << endl;
-
-
-	HWND hWnd = GetForegroundWindow();
-	if (hWnd == nullptr)
-		return false;
-
-
-	cout << "" << endl;
-	cout << "HWND:				0x" << hex << hWnd << endl;
-
-
-	D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
-	DXGI_SWAP_CHAIN_DESC swapChainDesc;
-	ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
-	swapChainDesc.BufferCount = 1;
-	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	swapChainDesc.OutputWindow = hWnd;
-	swapChainDesc.SampleDesc.Count = 1;
-	swapChainDesc.Windowed = (GetWindowLong(hWnd, GWL_STYLE) & WS_POPUP) != 0 ? FALSE : TRUE;
-	swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-	if (FAILED(D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, NULL, &featureLevel, 1, D3D11_SDK_VERSION, &swapChainDesc, &m_pSwapChain, &m_pDevice, NULL, &m_pContext)))
-	{
-		MessageBox(hWnd, "Unable to create pDevice & pSwapChain!", "FATAL ERROR", MB_ICONERROR);
-		return false;
-	}
-
-
-	cout << "m_pSwapChain:			0x" << hex << m_pSwapChain << endl;
-	cout << "m_pDevice:			0x" << hex << m_pDevice << endl;
-	cout << "m_pContext:			0x" << hex << m_pContext << endl;
-
-	m_pSwapChainVtable = (DWORD_PTR*)m_pSwapChain;
-	m_pSwapChainVtable = (DWORD_PTR*)m_pSwapChainVtable[0];
-
-	cout << "m_pSwapChainVtable:		0x" << hex << m_pSwapChainVtable << endl;
-
-	DWORD dwOld;
-	VirtualProtect(pPresent, 2, PAGE_EXECUTE_READWRITE, &dwOld);
-
-	return (m_pSwapChainVtable);
-}
+static std::ofstream logFile("log.txt", std::ofstream::out);
 
 bool FindSwapChain()
 {
-	if (CreateDeviceAndSwapChain() == false)
+	if (!Device::Initialize())
 		return false;
+
+	const DWORD_PTR swapChainVTable = reinterpret_cast<DWORD_PTR>(PresentVTableHook::GetVtable(&Device::GetSwapChain()));
+	DWORD_PTR dwVTableAddress = 0;
 
 #define _PTR_MAX_VALUE 0xFFE00000
 	MEMORY_BASIC_INFORMATION32 mbi = { 0 };
-
 
 	for (DWORD_PTR memptr = 0x10000; memptr < _PTR_MAX_VALUE; memptr = mbi.BaseAddress + mbi.RegionSize) //For x64 -> 0x10000 ->  0x7FFFFFFEFFFF
 	{
@@ -165,10 +53,11 @@ bool FindSwapChain()
 		if (mbi.State != MEM_COMMIT || mbi.Protect == PAGE_NOACCESS || mbi.Protect & PAGE_GUARD) //Filter Regions
 			continue;
 
-		DWORD_PTR len = mbi.BaseAddress + mbi.RegionSize;     //Do once
+		const DWORD_PTR len = mbi.BaseAddress + mbi.RegionSize;     //Do once
 
 		for (DWORD_PTR current = mbi.BaseAddress; current < len; ++current)
 		{
+			// interpret data as pointer
 			__try
 			{
 				dwVTableAddress = *(DWORD_PTR*)current;
@@ -178,21 +67,122 @@ bool FindSwapChain()
 				continue;
 			}
 
-			if (dwVTableAddress == (DWORD_PTR)m_pSwapChainVtable)
+			if (dwVTableAddress == swapChainVTable)
 			{
-				if (current == (DWORD_PTR)m_pSwapChain)
+				if (current == (DWORD_PTR)&Device::GetSwapChain())
 					continue;
 				else
 				{
-					cout << "" << endl;
-					return hookD3D11Present((IDXGISwapChain*)current);    //If found we hook Present in swapChain
+				//	cout << current << endl;
+					logFile << current << endl;
+				//	return hookD3D11Present((IDXGISwapChain*)current);    //If found we hook Present in swapChain
 				}
 			}
 		}
 	}
-	return true;
+	return false;
 }
 
+// **************************************************************** //
+
+
+#pragma data_seg (".shared")
+int		g_bSubclassed = 0;	// START button subclassed?
+UINT	WM_HOOKEX = 0;
+HWND	g_hWnd = 0;		// handle of START button
+HHOOK	g_hHook = 0;
+#pragma data_seg ()
+
+#pragma comment(linker,"/SECTION:.shared,RWS")
+
+
+//-------------------------------------------------------------
+// global variables (unshared!)
+//
+HINSTANCE	hDll;
+
+// New & old window procedure of the subclassed START button
+WNDPROC				OldProc = NULL;
+LRESULT CALLBACK	NewProc(HWND, UINT, WPARAM, LPARAM);
+
+
+//-------------------------------------------------------------
+// DllMain
+//
+BOOL APIENTRY DllMain(HANDLE hModule,
+	DWORD  ul_reason_for_call,
+	LPVOID lpReserved
+)
+{
+	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
+	{
+		std::cout << "attached dll" << std::endl;
+		hDll = (HINSTANCE)hModule;
+		::DisableThreadLibraryCalls(hDll);
+
+		if (WM_HOOKEX == NULL)
+			WM_HOOKEX = ::RegisterWindowMessage("WM_HOOKEX_RK");
+	}
+
+	return TRUE;
+}
+
+
+#define pCW ((CWPSTRUCT*)lParam)
+
+LRESULT HookProc(
+	int code,       // hook code
+	WPARAM wParam,  // virtual-key code
+	LPARAM lParam   // keystroke-message information
+)
+{
+	if ((pCW->message == WM_HOOKEX) && pCW->lParam)
+	{
+		::UnhookWindowsHookEx(g_hHook);
+
+		if (g_bSubclassed)
+			goto END;		// already subclassed?
+
+		// Let's increase the reference count of the DLL (via LoadLibrary),
+		// so it's NOT unmapped once the hook is removed;
+		char lib_name[MAX_PATH];
+		::GetModuleFileName(hDll, lib_name, MAX_PATH);
+
+		if (!::LoadLibrary(lib_name))
+			goto END;
+
+		FindSwapChain();
+
+		// Subclass START button
+	/*	OldProc = (WNDPROC)
+			::SetWindowLong(g_hWnd, GWL_WNDPROC, (long)NewProc);
+		if (OldProc == NULL)			// failed?
+			::FreeLibrary(hDll);
+		else {						// success -> leave
+			::MessageBeep(MB_OK);	// mapped into "explorer.exe"
+			g_bSubclassed = true;
+		}*/
+	}
+	else if (pCW->message == WM_HOOKEX)
+	{
+		::UnhookWindowsHookEx(g_hHook);
+
+		// Failed to restore old window procedure? => Don't unmap the
+		// DLL either. Why? Because then "explorer.exe" would call our
+		// "unmapped" NewProc and  crash!!
+		if (!SetWindowLong(g_hWnd, GWL_WNDPROC, (long)OldProc))
+			goto END;
+
+		::FreeLibrary(hDll);
+
+		::MessageBeep(MB_OK);
+		g_bSubclassed = false;
+	}
+
+END:
+	return ::CallNextHookEx(g_hHook, code, wParam, lParam);
+}
+/*
 int __cdecl main(void)
 {
 	STARTUPINFO si;
@@ -219,7 +209,55 @@ int __cdecl main(void)
 		return 0;
 	}
 
-	FindSwapChain();
+	std::cout << FindSwapChain();
+
+	char c;
+	std::cin >> c;
 
 	return 0;
+}*/
+
+int InjectDll(HWND hWnd)
+{
+	g_hWnd = hWnd;
+
+	// Hook
+	g_hHook = SetWindowsHookEx(WH_CALLWNDPROC, (HOOKPROC)HookProc,
+		hDll, GetWindowThreadProcessId(hWnd, NULL));
+	if (g_hHook == NULL)
+		return 0;
+
+	// By the time SendMessage returns, 
+	// the START button has already been subclassed
+	SendMessage(hWnd, WM_HOOKEX, 0, 1);
+	
+	return g_bSubclassed;
+}
+
+int UnmapDll()
+{
+	g_hHook = SetWindowsHookEx(WH_CALLWNDPROC, (HOOKPROC)HookProc,
+		hDll, GetWindowThreadProcessId(g_hWnd, NULL));
+
+	if (g_hHook == NULL)
+		return 0;
+
+	SendMessage(g_hWnd, WM_HOOKEX, 0, 0);
+
+	return (g_bSubclassed == NULL);
+}
+
+//-------------------------------------------------------------
+// NewProc
+// Notice:	- new window procedure for the START button;
+//			- it just swaps the left & right muse clicks;
+//	
+LRESULT CALLBACK NewProc(
+	HWND hwnd,      // handle to window
+	UINT uMsg,      // message identifier
+	WPARAM wParam,  // first message parameter
+	LPARAM lParam   // second message parameter
+)
+{
+	return CallWindowProc(OldProc, hwnd, uMsg, wParam, lParam);
 }

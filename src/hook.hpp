@@ -15,12 +15,14 @@ public:
 		m_oldVtable(GetVtable(_object)),
 		m_entryCount(GetVtableCount(m_oldVtable))
 	{
+		std::ofstream logFile("log2.txt", std::ofstream::out);
+		logFile << m_entryCount << std::endl;
 		DWORD dwOld;
 		VirtualProtect(m_oldVtable, m_entryCount, PAGE_EXECUTE_READWRITE, &dwOld);
 
 		m_newVtable = new DWORD[m_entryCount];
 		memcpy(m_newVtable, m_oldVtable, sizeof(DWORD) * m_entryCount);
-		*m_baseObject = 0;// reinterpret_cast<DWORD>(m_newVtable);
+		*m_baseObject = reinterpret_cast<DWORD>(m_newVtable);
 	}
 
 	~VTableHook()
@@ -28,11 +30,14 @@ public:
 		delete m_newVtable;
 	}
 
-	void AddHook(FnT _function, unsigned _index)
+	// returns an pointer to the overwritten function
+	FnT AddHook(FnT _function, unsigned _index)
 	{
-		assert(_index < m_entryCount);
+		if (_index >= m_entryCount) return nullptr;
 
-		m_newVtable[_index] = *reinterpret_cast<DWORD*>(_function);
+		FnT old = reinterpret_cast<FnT>(m_newVtable[_index]);
+		m_newVtable[_index] = reinterpret_cast<DWORD>(_function);
+		return old;
 	}
 
 	// points to the first element of the objects vtable

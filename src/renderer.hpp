@@ -10,6 +10,7 @@ public:
 	static bool Initialize();
 
 	static HRESULT __stdcall Present(IDXGISwapChain* This, UINT SyncInterval, UINT Flags);
+	static void SetOrgPresent(D3D11PresentHook _orgPresent) { m_orgPresent = _orgPresent; }
 
 	static IDXGISwapChain& GetSwapChain() { assert(m_swapChain); return *m_swapChain; }
 private:

@@ -8,6 +8,7 @@
 #include <d3d11.h>
 #include <iostream>
 #include <fstream>
+#include <set>
 
 bool firstTime = true;
 
@@ -27,20 +28,30 @@ bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
 
 	//HOOKING PRESENT
 	PresentVTableHook* hook = new PresentVTableHook(pSwapChain);
-	hook->AddHook(Device::Present, 8);
+	auto oldPresent = hook->AddHook(Device::Present, 8);
+	Device::SetOrgPresent(oldPresent);
 
 	return true;
 }
 
+// __try does not like objects with destructors
 static std::ofstream logFile("log.txt", std::ofstream::out);
+static std::set<DWORD_PTR> foundObjects;
+
+static void ResetFoundObjects() { foundObjects.clear(); }
+static bool Insert(DWORD_PTR _ptr) { return foundObjects.insert(_ptr).second; }
+static size_t CountObjects() { return foundObjects.size(); }
 
 bool FindSwapChain()
 {
 	if (!Device::Initialize())
 		return false;
 
+	ResetFoundObjects();
+
 	const DWORD_PTR swapChainVTable = reinterpret_cast<DWORD_PTR>(PresentVTableHook::GetVtable(&Device::GetSwapChain()));
 	DWORD_PTR dwVTableAddress = 0;
+	int objectCount = 0;
 
 #define _PTR_MAX_VALUE 0xFFE00000
 	MEMORY_BASIC_INFORMATION32 mbi = { 0 };
@@ -71,12 +82,16 @@ bool FindSwapChain()
 			{
 				if (current == (DWORD_PTR)&Device::GetSwapChain())
 					continue;
-				else
+				else if (Insert(current))
 				{
-				//	cout << current << endl;
 					logFile << current << endl;
-				//	return hookD3D11Present((IDXGISwapChain*)current);    //If found we hook Present in swapChain
+					if(objectCount == 1) hookD3D11Present((IDXGISwapChain*)current);
 				}
+				else if(objectCount > 10)// found object for second time
+				{
+					return true;
+				}
+				++objectCount;
 			}
 		}
 	}
@@ -152,6 +167,10 @@ LRESULT HookProc(
 			goto END;
 
 		FindSwapChain();
+	//	for (DWORD_PTR p : foundObjects)
+		{
+	//		hookD3D11Present((IDXGISwapChain*)p);
+		}
 
 		// Subclass START button
 	/*	OldProc = (WNDPROC)

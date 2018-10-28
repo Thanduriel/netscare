@@ -7,13 +7,6 @@ HWND hStart;		// handle to start button
 
 BOOL CALLBACK MainDlgProc(HWND, UINT, WPARAM, LPARAM);
 
-/*int APIENTRY WinMain(HINSTANCE hInstance,
-	HINSTANCE hPrevInstance,
-	LPSTR     lpCmdLine,
-	int       nCmdShow)*/
-//-----------------------------------------------
-// WinMain
-//
 int main()
 {
 	STARTUPINFO si;

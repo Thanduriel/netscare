@@ -102,7 +102,7 @@ bool FindSwapChain()
 
 
 #pragma data_seg (".shared")
-int		g_bSubclassed = 0;	// START button subclassed?
+int		g_isHooked = 0;	// START button subclassed?
 UINT	WM_HOOKEX = 0;
 HWND	g_hWnd = 0;		// handle of START button
 HHOOK	g_hHook = 0;
@@ -155,7 +155,7 @@ LRESULT HookProc(
 	{
 		::UnhookWindowsHookEx(g_hHook);
 
-		if (g_bSubclassed)
+		if (g_isHooked)
 			goto END;		// already subclassed?
 
 		// Let's increase the reference count of the DLL (via LoadLibrary),
@@ -167,20 +167,6 @@ LRESULT HookProc(
 			goto END;
 
 		FindSwapChain();
-	//	for (DWORD_PTR p : foundObjects)
-		{
-	//		hookD3D11Present((IDXGISwapChain*)p);
-		}
-
-		// Subclass START button
-	/*	OldProc = (WNDPROC)
-			::SetWindowLong(g_hWnd, GWL_WNDPROC, (long)NewProc);
-		if (OldProc == NULL)			// failed?
-			::FreeLibrary(hDll);
-		else {						// success -> leave
-			::MessageBeep(MB_OK);	// mapped into "explorer.exe"
-			g_bSubclassed = true;
-		}*/
 	}
 	else if (pCW->message == WM_HOOKEX)
 	{
@@ -195,46 +181,12 @@ LRESULT HookProc(
 		::FreeLibrary(hDll);
 
 		::MessageBeep(MB_OK);
-		g_bSubclassed = false;
+		g_isHooked = false;
 	}
 
 END:
 	return ::CallNextHookEx(g_hHook, code, wParam, lParam);
 }
-/*
-int __cdecl main(void)
-{
-	STARTUPINFO si;
-	PROCESS_INFORMATION pi;
-
-	ZeroMemory(&si, sizeof(si));
-	si.cb = sizeof(si);
-	ZeroMemory(&pi, sizeof(pi));
-
-	// Start the child process. 
-	if (!CreateProcess(NULL,   // No module name (use command line)
-		"demo.exe",        // Command line
-		NULL,           // Process handle not inheritable
-		NULL,           // Thread handle not inheritable
-		FALSE,          // Set handle inheritance to FALSE
-		0,              // No creation flags
-		NULL,           // Use parent's environment block
-		NULL,           // Use parent's starting directory 
-		&si,            // Pointer to STARTUPINFO structure
-		&pi)           // Pointer to PROCESS_INFORMATION structure
-		)
-	{
-		printf("CreateProcess failed (%d).\n", GetLastError());
-		return 0;
-	}
-
-	std::cout << FindSwapChain();
-
-	char c;
-	std::cin >> c;
-
-	return 0;
-}*/
 
 int InjectDll(HWND hWnd)
 {
@@ -250,7 +202,7 @@ int InjectDll(HWND hWnd)
 	// the START button has already been subclassed
 	SendMessage(hWnd, WM_HOOKEX, 0, 1);
 	
-	return g_bSubclassed;
+	return g_isHooked;
 }
 
 int UnmapDll()
@@ -263,7 +215,7 @@ int UnmapDll()
 
 	SendMessage(g_hWnd, WM_HOOKEX, 0, 0);
 
-	return (g_bSubclassed == NULL);
+	return !g_isHooked;
 }
 
 //-------------------------------------------------------------

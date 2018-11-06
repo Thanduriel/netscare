@@ -18,17 +18,3 @@ add_executable(injector injector/main.cpp)
 target_link_libraries(injector netscare)
 
 add_executable(demo WIN32 demo/X11FullScreen.cpp)
-
-# detours
-#include_directories("dependencies/detours/src")
-#file(GLOB SOURCE_FILES_DETOURS "dependencies/detours/src/*.cpp")
-
-add_library(detours STATIC dependencies/detours/src/detours.cpp 
-	dependencies/detours/src/modules.cpp 
-	dependencies/detours/src/disasm.cpp 
-	dependencies/detours/src/image.cpp 
-	dependencies/detours/src/creatwth.cpp 
-	dependencies/detours/src/disolx86.cpp 
-	dependencies/detours/src/disolx64.cpp 
-	dependencies/detours/src/disolia64.cpp)
-#target_link_libraries (netscare detours)

@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include <iostream>
+#include <windows.h>
 #include <stdio.h>
 #include <fstream>
 
@@ -100,8 +101,7 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 		m_swapChain->Release();
 		cout << "m_pSwapChain released" << endl;
 
-		std::ofstream file("test.txt");
-		file << "foo\n\n";
+		MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
 
 		init = false;
 	}

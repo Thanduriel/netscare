@@ -19,6 +19,7 @@ private:
 	static ID3D11Device* m_device;
 	static ID3D11DeviceContext* m_context;
 	static IDXGISwapChain* m_swapChain;
+	static ID3D11RenderTargetView *m_backbuffer;
 
 	// hook related
 	static DWORD_PTR* m_swapChainVtable;

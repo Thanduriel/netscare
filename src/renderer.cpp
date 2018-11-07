@@ -7,6 +7,7 @@
 ID3D11Device* Device::m_device = nullptr;
 ID3D11DeviceContext* Device::m_context = nullptr;
 IDXGISwapChain* Device::m_swapChain = nullptr;
+ID3D11RenderTargetView* Device::backbuffer = nullptr;
 
 DWORD_PTR* Device::m_swapChainVtable = nullptr;
 D3D11PresentHook Device::m_orgPresent = nullptr;
@@ -93,18 +94,25 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 		cout << "" << endl;
 
 		m_device->Release();
-		cout << "m_pDevice released" << endl;
+		// cout << "m_pDevice released" << endl;
 
 		m_context->Release();
-		cout << "m_pContext released" << endl;
+		// cout << "m_pContext released" << endl;
 
 		m_swapChain->Release();
-		cout << "m_pSwapChain released" << endl;
+		// cout << "m_pSwapChain released" << endl;
 
 		MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
 
 		init = false;
+		ID3D11Texture2D *pBackBuffer;
+		This->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+		m_device->CreateRenderTargetView(pBackBuffer, NULL, &m_backbuffer);
+		pBackBuffer->Release();
 	}
+
+	float color[] = { 1.f, 0.f, 0.f, 1.f };
+	m_context->ClearRenderTargetView(m_backbuffer, color);
 	
 	return m_orgPresent(This, SyncInterval, Flags);
 }

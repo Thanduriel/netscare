@@ -69,14 +69,6 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 	static bool init = true;
 	if (init)
 	{
-		__asm
-		{
-			push eax
-			mov eax, [ebp + 8]
-			mov This, eax
-			pop eax
-		}
-
 		//GET DEVICE
 		This->GetDevice(__uuidof(ID3D11Device), (void**)&m_device);
 

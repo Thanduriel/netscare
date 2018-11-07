@@ -7,7 +7,7 @@
 ID3D11Device* Device::m_device = nullptr;
 ID3D11DeviceContext* Device::m_context = nullptr;
 IDXGISwapChain* Device::m_swapChain = nullptr;
-ID3D11RenderTargetView* Device::backbuffer = nullptr;
+ID3D11RenderTargetView* Device::m_backbuffer = nullptr;
 
 DWORD_PTR* Device::m_swapChainVtable = nullptr;
 D3D11PresentHook Device::m_orgPresent = nullptr;

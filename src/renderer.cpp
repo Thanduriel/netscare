@@ -94,7 +94,7 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 		m_swapChain->Release();
 		// cout << "m_pSwapChain released" << endl;
 
-		MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
+	//	MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
 
 		init = false;
 		ID3D11Texture2D *pBackBuffer;

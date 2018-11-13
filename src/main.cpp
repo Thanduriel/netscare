@@ -14,19 +14,21 @@ bool firstTime = true;
 
 using namespace std;
 
-bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
+bool IsValidSwapChain(IDXGISwapChain* pSwapChain)
 {
-//	DXGI_FRAME_STATISTICS stats;
-//	pSwapChain->GetFrameStatistics(&stats);
-	
-	cout << "Hooking Present" << endl;
-	cout << "" << endl;
+	__try {
+		DXGI_FRAME_STATISTICS stats;
+		pSwapChain->GetFrameStatistics(&stats);
+	}
+	__except (1)
+	{
+		return false;
+	}
+	return true;
+}
 
-	cout << "New m_SwapChain:		0x" << hex << pSwapChain << endl;
-	//CHECKING IF SWAPCHAIN IS VALID
-	if (!pSwapChain) return false;
-
-	//HOOKING PRESENT
+bool __stdcall HookD3D11Present(IDXGISwapChain* pSwapChain)
+{	
 	PresentVTableHook* hook = new PresentVTableHook(pSwapChain);
 	auto oldPresent = hook->AddHook(Device::Present, 8);
 	Device::SetOrgPresent(oldPresent);
@@ -34,32 +36,22 @@ bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
 	return true;
 }
 
-// __try does not like objects with destructors
-static std::ofstream logFile("log.txt", std::ofstream::out);
-static std::set<DWORD_PTR> foundObjects;
-
-static void ResetFoundObjects() { foundObjects.clear(); }
-static bool Insert(DWORD_PTR _ptr) { return foundObjects.insert(_ptr).second; }
-static size_t CountObjects() { return foundObjects.size(); }
-
 bool FindSwapChain()
 {
 	if (!Device::Initialize())
 		return false;
 
-	ResetFoundObjects();
-
 	const DWORD_PTR swapChainVTable = reinterpret_cast<DWORD_PTR>(PresentVTableHook::GetVtable(&Device::GetSwapChain()));
 	DWORD_PTR dwVTableAddress = 0;
 	int objectCount = 0;
 
-#define _PTR_MAX_VALUE 0xFFE00000
+	constexpr DWORD_PTR _PTR_MAX_VALUE = 0xFFE00000;
 	MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 
 	for (DWORD_PTR memptr = 0x10000; memptr < _PTR_MAX_VALUE; memptr = mbi.BaseAddress + mbi.RegionSize) //For x64 -> 0x10000 ->  0x7FFFFFFEFFFF
 	{
 		if (!VirtualQuery(reinterpret_cast<LPCVOID>(memptr), reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi), sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
-			continue;
+			break;
 
 		if (mbi.State != MEM_COMMIT || mbi.Protect == PAGE_NOACCESS || mbi.Protect & PAGE_GUARD) //Filter Regions
 			continue;
@@ -80,21 +72,20 @@ bool FindSwapChain()
 
 			if (dwVTableAddress == swapChainVTable)
 			{
-				if (current == (DWORD_PTR)&Device::GetSwapChain())
+				IDXGISwapChain* swapChain = reinterpret_cast<IDXGISwapChain*>(current);
+
+				if (swapChain == &Device::GetSwapChain())
 					continue;
-				else if (Insert(current))
+				else if (IsValidSwapChain(swapChain))
 				{
-					logFile << current << endl;
-					if(objectCount == 1) hookD3D11Present((IDXGISwapChain*)current);
-				}
-				else if(objectCount > 10)// found object for second time
-				{
+					HookD3D11Present(swapChain);
 					return true;
 				}
-				++objectCount;
 			}
 		}
 	}
+
+	MessageBox(nullptr, "finished scan", "Caption", MB_OK);
 	return false;
 }
 

@@ -55,12 +55,24 @@ bool FindSwapChain()
 
 #define _PTR_MAX_VALUE 0xFFE00000
 	MEMORY_BASIC_INFORMATION32 mbi = { 0 };
+	DWORD fisrAddr = 0x0;
+	int count = 0;
+
 
 	for (DWORD_PTR memptr = 0x10000; memptr < _PTR_MAX_VALUE; memptr = mbi.BaseAddress + mbi.RegionSize) //For x64 -> 0x10000 ->  0x7FFFFFFEFFFF
 	{
-		if (!VirtualQuery(reinterpret_cast<LPCVOID>(memptr), reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi), sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
-			continue;
-
+		++count;
+		if (!VirtualQuery(reinterpret_cast<LPCVOID>(memptr), reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi), sizeof(MEMORY_BASIC_INFORMATION))) {//Iterate memory by using VirtualQuery 
+			MessageBox(NULL, "Fail Virtual Query", "Fail", MB_OK);
+			break;
+		}
+		if (fisrAddr ==  mbi.BaseAddress) {
+			char c[30];
+			sprintf_s<30>(c, "%i count", count);
+			MessageBox(NULL, c , "found start", MB_OK);
+			break;
+		}
+		if (!fisrAddr) fisrAddr = mbi.BaseAddress;
 		if (mbi.State != MEM_COMMIT || mbi.Protect == PAGE_NOACCESS || mbi.Protect & PAGE_GUARD) //Filter Regions
 			continue;
 
@@ -89,7 +101,7 @@ bool FindSwapChain()
 				}
 				else if(objectCount > 10)// found object for second time
 				{
-					return true;
+					// return true;
 				}
 				++objectCount;
 			}

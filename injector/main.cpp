@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "../src/interface.hpp"
+#include "../src/PipeServer.hpp"
 
 HWND hStart;		// handle to start button
 
@@ -16,6 +17,12 @@ int main()
 	si.cb = sizeof(si);
 	ZeroMemory(&pi, sizeof(pi));
 
+	PipeServer pipeServer{};
+	std::size_t pipeId = 0;
+	if ((pipeId = pipeServer.addConnection(si)) == 0) {
+		std::cerr << "Can't build Pipe" << '\n';
+	}
+	std::cout << "Build Pipes" << '\n';
 	// Start the child process. 
 	if (!CreateProcess(NULL,   // No module name (use command line)
 		"demo.exe",        // Command line
@@ -32,6 +39,7 @@ int main()
 		printf("CreateProcess failed (%d).\n", GetLastError());
 		return 0;
 	}
+	
 	WaitForInputIdle(pi.hProcess, 5000);
 
 	HWND hWnd = GetForegroundWindow();
@@ -40,6 +48,13 @@ int main()
 
 	InjectDll(hWnd);
 
+	std::cout << "Start connectio  test \n";
+	if (!pipeServer.checkConnection(pipeId)) {
+		std::cout << "Can't verifeyd the connection" << '\n';
+	}
+	else {
+		std::cout << "Is connected" << '\n';
+	}
 	char c;
 	std::cin >> c;
 	UnmapDll();

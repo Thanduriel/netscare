@@ -14,7 +14,7 @@ include_directories(${DirectX_XYZ_INCLUDE_DIR})
 add_library(netscare SHARED ${SOURCE_FILES})
 target_link_libraries(netscare d3d11)
 
-add_executable(injector injector/main.cpp)
+add_executable(injector injector/main.cpp src/PipeServer.cpp)
 target_link_libraries(injector netscare)
 
 add_executable(demo WIN32 demo/X11FullScreen.cpp)

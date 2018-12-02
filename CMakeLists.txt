@@ -9,7 +9,10 @@ file(GLOB SOURCE_FILES
 
 include(FindDirectX.cmake)
 
-include_directories(${DirectX_XYZ_INCLUDE_DIR})
+add_compile_options("/I%(WindowsSDK_IncludePath)")
+
+include_directories(${DirectX_D3D11_INCLUDE_DIR})
+message(STATUS ${DirectX_D3D11_2_INCLUDE_DIR})
 
 add_library(netscare SHARED ${SOURCE_FILES})
 target_link_libraries(netscare d3d11)

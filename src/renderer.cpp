@@ -8,6 +8,8 @@ ID3D11Device* Device::m_device = nullptr;
 ID3D11DeviceContext* Device::m_context = nullptr;
 IDXGISwapChain* Device::m_swapChain = nullptr;
 ID3D11RenderTargetView* Device::m_backbuffer = nullptr;
+const Effect* Device::m_effect = nullptr;
+const Texture* Device::m_texture = nullptr;
 
 DWORD_PTR* Device::m_swapChainVtable = nullptr;
 D3D11PresentHook Device::m_orgPresent = nullptr;
@@ -69,42 +71,71 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 	static bool init = true;
 	if (init)
 	{
-		//GET DEVICE
-		This->GetDevice(__uuidof(ID3D11Device), (void**)&m_device);
-
-		//CHECKING IF DEVICE IS VALID
-		cout << "New m_pDevice:			0x" << hex << m_device << endl;
-		if (!m_device) return false;
-
-		//REPLACING CONTEXT
-		m_device->GetImmediateContext(&m_context);
-
-		//CHECKING IF CONTEXT IS VALID
-		cout << "New m_context:			0x" << hex << m_context << endl;
-		if (!m_context) return false;
-
-		cout << "" << endl;
-
-		m_device->Release();
-		// cout << "m_pDevice released" << endl;
-
-		m_context->Release();
-		// cout << "m_pContext released" << endl;
-
-		m_swapChain->Release();
-		// cout << "m_pSwapChain released" << endl;
-
-	//	MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
-
 		init = false;
-		ID3D11Texture2D *pBackBuffer;
-		This->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
-		m_device->CreateRenderTargetView(pBackBuffer, NULL, &m_backbuffer);
-		pBackBuffer->Release();
+		InitializeParent(This);
 	}
 
 	float color[] = { 1.f, 0.f, 0.f, 1.f };
 	m_context->ClearRenderTargetView(m_backbuffer, color);
+	Draw();
 	
 	return m_orgPresent(This, SyncInterval, Flags);
+}
+
+void Device::SetEffect(const Effect& _effect)
+{
+	m_effect = &_effect;
+
+	m_context->IASetInputLayout(_effect.GetInputLayout());
+
+	// Set the vertex and pixel shaders that will be used to render this triangle.
+	m_context->VSSetShader(_effect.GetVertexShader(), NULL, 0);
+	m_context->PSSetShader(_effect.GetPixelShader(), NULL, 0);
+}
+
+void Device::Draw()
+{
+
+	// Render the triangle.
+	SetEffect(*m_effect);
+	m_texture->Draw(m_context);
+}
+
+void Device::InitializeParent(IDXGISwapChain* _this)
+{
+	//GET DEVICE
+	_this->GetDevice(__uuidof(ID3D11Device), (void**)&m_device);
+
+	//CHECKING IF DEVICE IS VALID
+	cout << "New m_pDevice:			0x" << hex << m_device << endl;
+	if (!m_device) return;
+
+	//REPLACING CONTEXT
+	m_device->GetImmediateContext(&m_context);
+
+	//CHECKING IF CONTEXT IS VALID
+	cout << "New m_context:			0x" << hex << m_context << endl;
+	if (!m_context) return;
+
+	cout << "" << endl;
+
+	m_device->Release();
+	// cout << "m_pDevice released" << endl;
+
+	m_context->Release();
+	// cout << "m_pContext released" << endl;
+
+	m_swapChain->Release();
+	// cout << "m_pSwapChain released" << endl;
+
+//	MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
+
+	ID3D11Texture2D *pBackBuffer;
+	_this->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+	m_device->CreateRenderTargetView(pBackBuffer, NULL, &m_backbuffer);
+	pBackBuffer->Release();
+
+	Effect* effect = new Effect(m_device,L"../shader/texture.vs",L"../shader/texture.ps");
+	m_texture = new Texture(m_device);
+	SetEffect(*effect);
 }

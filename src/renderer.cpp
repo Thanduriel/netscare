@@ -136,6 +136,6 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 	pBackBuffer->Release();
 
 	Effect* effect = new Effect(m_device,L"../shader/texture.vs",L"../shader/texture.ps");
-	m_texture = new Texture(m_device);
+	m_texture = new Texture(m_device, -0.5f, -0.5f, 0.5f, 0.5f);
 	SetEffect(*effect);
 }

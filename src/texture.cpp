@@ -1,22 +1,19 @@
 #include "texture.hpp"
 
-constexpr int VERTEX_COUNT = 3;
+constexpr int VERTEX_COUNT = 4;
 
-Texture::Texture(ID3D11Device* _d3dDevice)
+Texture::Texture(ID3D11Device* _d3dDevice, float _x1, float _y1, float _x2, float _y2)
 {
-	D3D11_BUFFER_DESC vertexBufferDesc, indexBufferDesc;
-	D3D11_SUBRESOURCE_DATA vertexData, indexData;
-	HRESULT result;
-
-	VertexType vertices[VERTEX_COUNT];
-	unsigned long indices[VERTEX_COUNT];
-
 	// Load the vertex array with data.
-	vertices[0].position = D3DXVECTOR3{ -1.0f, -1.0f, 0.0f };  // Bottom left.
-	vertices[1].position = D3DXVECTOR3{0.0f, 1.0f, 0.0f};  // Top middle.
-	vertices[2].position = D3DXVECTOR3{ 1.0f, -1.0f, 0.0f };  // Bottom right.
+	VertexType vertices[VERTEX_COUNT];
+	vertices[0].position = D3DXVECTOR3{ _x1, _y1, 0.0f };  // Bottom left.
+	vertices[1].position = D3DXVECTOR3{_x1, _y2, 0.0f};  // Top middle.
+	vertices[2].position = D3DXVECTOR3{ _x2, _y1, 0.0f };  // Bottom right.
+	vertices[3].position = D3DXVECTOR3{ _x2, _y2, 0.0f };  // Bottom right.
 
-		// Set up the description of the static vertex buffer.
+
+	// Set up the description of the static vertex buffer.
+	D3D11_BUFFER_DESC vertexBufferDesc;
 	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	vertexBufferDesc.ByteWidth = sizeof(VertexType) * VERTEX_COUNT;
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
@@ -25,11 +22,13 @@ Texture::Texture(ID3D11Device* _d3dDevice)
 	vertexBufferDesc.StructureByteStride = 0;
 
 	// Give the subresource structure a pointer to the vertex data.
+	D3D11_SUBRESOURCE_DATA vertexData;
 	vertexData.pSysMem = vertices;
 	vertexData.SysMemPitch = 0;
 	vertexData.SysMemSlicePitch = 0;
 
 	// Now create the vertex buffer.
+	HRESULT result;
 	result = _d3dDevice->CreateBuffer(&vertexBufferDesc, &vertexData, &m_vertexBuffer);
 	if (FAILED(result))
 	{
@@ -63,7 +62,7 @@ void Texture::Draw(ID3D11DeviceContext* _deviceContext) const
 	//_deviceContext->IASetIndexBuffer(m_indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
 	// Set the type of primitive that should be rendered from this vertex buffer, in this case triangles.
-	_deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	_deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-	_deviceContext->Draw(3, 0);
+	_deviceContext->Draw(VERTEX_COUNT, 0);
 }

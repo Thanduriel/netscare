@@ -1,7 +1,10 @@
 #include "effect.hpp"
+#include "renderer.hpp"
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
 #include<string>
+#include <VertexTypes.h>
+#include <CommonStates.h>
 
 #pragma comment(lib,"d3dcompiler.lib")
 
@@ -9,9 +12,6 @@ Effect::Effect(ID3D11Device* _device, WCHAR* _vsFilename, WCHAR* _psFilename)
 {
 	HRESULT result;
 	ID3D10Blob* errorMessage;
-	D3D11_INPUT_ELEMENT_DESC polygonLayout[1];
-	unsigned int numElements;
-
 
 	errorMessage = nullptr;
 	
@@ -44,21 +44,11 @@ Effect::Effect(ID3D11Device* _device, WCHAR* _vsFilename, WCHAR* _psFilename)
 		MessageBox(nullptr, "failed to create ps", "Caption", MB_OK);
 	}
 
-	// Now setup the layout of the data that goes into the shader.
-	// This setup needs to match the VertexType stucture in the ModelClass and in the shader.
-	polygonLayout[0].SemanticName = "POSITION";
-	polygonLayout[0].SemanticIndex = 0;
-	polygonLayout[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-	polygonLayout[0].InputSlot = 0;
-	polygonLayout[0].AlignedByteOffset = 0;
-	polygonLayout[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
-	polygonLayout[0].InstanceDataStepRate = 0;
-		
-	// Get a count of the elements in the layout.
-	numElements = sizeof(polygonLayout) / sizeof(polygonLayout[0]);
+	const int numElements = DirectX::VertexPositionTexture::InputElementCount;
 
 	// Create the vertex input layout.
-	result = _device->CreateInputLayout(polygonLayout, numElements, vsBlob->GetBufferPointer(),
+	result = _device->CreateInputLayout(DirectX::VertexPositionTexture::InputElements, 
+		numElements, vsBlob->GetBufferPointer(),
 		vsBlob->GetBufferSize(), &m_layout);
 	if (FAILED(result))
 	{
@@ -68,6 +58,9 @@ Effect::Effect(ID3D11Device* _device, WCHAR* _vsFilename, WCHAR* _psFilename)
 	// Release the vertex shader buffer and pixel shader buffer since they are no longer needed.
 	vsBlob->Release();
 	psBlob->Release();
+
+	m_sampleState = Device::GetCommonStates()->LinearWrap();
+	m_blendState = Device::GetCommonStates()->Additive();
 }
 
 HRESULT Effect::CompileShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint, _In_ LPCSTR profile, _Outptr_ ID3DBlob** blob)

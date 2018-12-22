@@ -8,6 +8,7 @@ ID3D11Device* Device::m_device = nullptr;
 ID3D11DeviceContext* Device::m_context = nullptr;
 IDXGISwapChain* Device::m_swapChain = nullptr;
 ID3D11RenderTargetView* Device::m_backbuffer = nullptr;
+const DirectX::CommonStates* Device::m_commonStates = nullptr;
 const Effect* Device::m_effect = nullptr;
 const Texture* Device::m_texture = nullptr;
 
@@ -91,6 +92,10 @@ void Device::SetEffect(const Effect& _effect)
 	// Set the vertex and pixel shaders that will be used to render this triangle.
 	m_context->VSSetShader(_effect.GetVertexShader(), NULL, 0);
 	m_context->PSSetShader(_effect.GetPixelShader(), NULL, 0);
+
+	m_context->PSSetSamplers(0, 1, &_effect.m_sampleState);
+	float factor[4] = { 1.f,1.f,1.f,1.f };
+	m_context->OMSetBlendState(_effect.m_blendState, factor, ~0); //D3D11_COLOR_WRITE_ENABLE_ALL & ~D3D11_COLOR_WRITE_ENABLE_ALPHA
 }
 
 void Device::Draw()
@@ -135,7 +140,9 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 	m_device->CreateRenderTargetView(pBackBuffer, NULL, &m_backbuffer);
 	pBackBuffer->Release();
 
+	m_commonStates = new DirectX::CommonStates(m_device);
+
 	Effect* effect = new Effect(m_device,L"../shader/texture.vs",L"../shader/texture.ps");
-	m_texture = new Texture(m_device, -0.5f, -0.5f, 0.5f, 0.5f);
+	m_texture = new Texture(m_device,L"../texture/bolt.dds", -0.5f, -0.5f, 0.5f, 0.5f);
 	SetEffect(*effect);
 }

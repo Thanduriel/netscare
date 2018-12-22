@@ -3,6 +3,7 @@
 #include <d3d.h>
 #include <d3d11.h>
 
+
 class Effect 
 {
 public:
@@ -15,7 +16,11 @@ public:
 private:
 	static HRESULT CompileShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint, _In_ LPCSTR profile, _Outptr_ ID3DBlob** blob);
 
+	friend class Device;
+
 	ID3D11VertexShader* m_vertexShader;
 	ID3D11PixelShader* m_pixelShader;
 	ID3D11InputLayout* m_layout;
+	ID3D11SamplerState* m_sampleState;
+	ID3D11BlendState* m_blendState;
 };

@@ -5,6 +5,7 @@
 #include <d3d.h>
 #include <d3d11.h>
 #include <cassert>
+#include <CommonStates.h>
 
 class Device 
 {
@@ -18,6 +19,8 @@ public:
 
 	static void SetEffect(const Effect& _effect);
 	static IDXGISwapChain& GetSwapChain() { assert(m_swapChain); return *m_swapChain; }
+
+	static const DirectX::CommonStates* GetCommonStates() { return m_commonStates; }
 private:
 	static void Draw();
 	static void InitializeParent(IDXGISwapChain* _this);
@@ -28,6 +31,7 @@ private:
 	static IDXGISwapChain* m_swapChain;
 	static ID3D11RenderTargetView* m_backbuffer;
 	
+	static const DirectX::CommonStates* m_commonStates;
 	static const Effect* m_effect;
 	static const Texture* m_texture;
 

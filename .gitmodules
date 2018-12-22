@@ -1,0 +1,3 @@
+[submodule "dependencies/DirectXTK"]
+	path = dependencies/DirectXTK
+	url = git@github.com:Microsoft/DirectXTK.git

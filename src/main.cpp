@@ -10,23 +10,38 @@
 #include <fstream>
 #include <set>
 
+#define PIPES 3
+
 bool firstTime = true;
 
 using namespace std;
 
-bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
+void showError(const char* caption, DWORD error);
+
+#pragma data_seg (".shared")
+int		g_isHooked = 0;	// START button subclassed?
+UINT	WM_HOOKEX = 0;
+HWND	g_hWnd = 0;		// handle of START button
+HHOOK	g_hHook = 0;
+HANDLE	pipeIn;
+HANDLE	pipeOut;
+#pragma data_seg ()
+
+bool IsValidSwapChain(IDXGISwapChain* pSwapChain)
 {
-//	DXGI_FRAME_STATISTICS stats;
-//	pSwapChain->GetFrameStatistics(&stats);
-	
-	cout << "Hooking Present" << endl;
-	cout << "" << endl;
+	__try {
+		DXGI_FRAME_STATISTICS stats;
+		pSwapChain->GetFrameStatistics(&stats);
+	}
+	__except (1)
+	{
+		return false;
+	}
+	return true;
+}
 
-	cout << "New m_SwapChain:		0x" << hex << pSwapChain << endl;
-	//CHECKING IF SWAPCHAIN IS VALID
-	if (!pSwapChain) return false;
-
-	//HOOKING PRESENT
+bool __stdcall HookD3D11Present(IDXGISwapChain* pSwapChain)
+{	
 	PresentVTableHook* hook = new PresentVTableHook(pSwapChain);
 	auto oldPresent = hook->AddHook(Device::Present, 8);
 	Device::SetOrgPresent(oldPresent);
@@ -34,26 +49,16 @@ bool __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain)
 	return true;
 }
 
-// __try does not like objects with destructors
-static std::ofstream logFile("log.txt", std::ofstream::out);
-static std::set<DWORD_PTR> foundObjects;
-
-static void ResetFoundObjects() { foundObjects.clear(); }
-static bool Insert(DWORD_PTR _ptr) { return foundObjects.insert(_ptr).second; }
-static size_t CountObjects() { return foundObjects.size(); }
-
 bool FindSwapChain()
 {
 	if (!Device::Initialize())
 		return false;
 
-	ResetFoundObjects();
-
 	const DWORD_PTR swapChainVTable = reinterpret_cast<DWORD_PTR>(PresentVTableHook::GetVtable(&Device::GetSwapChain()));
 	DWORD_PTR dwVTableAddress = 0;
 	int objectCount = 0;
 
-#define _PTR_MAX_VALUE 0xFFE00000
+	constexpr DWORD_PTR _PTR_MAX_VALUE = 0xFFE00000;
 	MEMORY_BASIC_INFORMATION32 mbi = { 0 };
 	DWORD fisrAddr = 0x0;
 	int count = 0;
@@ -61,18 +66,8 @@ bool FindSwapChain()
 
 	for (DWORD_PTR memptr = 0x10000; memptr < _PTR_MAX_VALUE; memptr = mbi.BaseAddress + mbi.RegionSize) //For x64 -> 0x10000 ->  0x7FFFFFFEFFFF
 	{
-		++count;
-		if (!VirtualQuery(reinterpret_cast<LPCVOID>(memptr), reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi), sizeof(MEMORY_BASIC_INFORMATION))) {//Iterate memory by using VirtualQuery 
-			MessageBox(NULL, "Fail Virtual Query", "Fail", MB_OK);
+		if (!VirtualQuery(reinterpret_cast<LPCVOID>(memptr), reinterpret_cast<PMEMORY_BASIC_INFORMATION>(&mbi), sizeof(MEMORY_BASIC_INFORMATION))) //Iterate memory by using VirtualQuery
 			break;
-		}
-		if (fisrAddr ==  mbi.BaseAddress) {
-			char c[30];
-			sprintf_s<30>(c, "%i count", count);
-			MessageBox(NULL, c , "found start", MB_OK);
-			break;
-		}
-		if (!fisrAddr) fisrAddr = mbi.BaseAddress;
 		if (mbi.State != MEM_COMMIT || mbi.Protect == PAGE_NOACCESS || mbi.Protect & PAGE_GUARD) //Filter Regions
 			continue;
 
@@ -92,33 +87,25 @@ bool FindSwapChain()
 
 			if (dwVTableAddress == swapChainVTable)
 			{
-				if (current == (DWORD_PTR)&Device::GetSwapChain())
+				IDXGISwapChain* swapChain = reinterpret_cast<IDXGISwapChain*>(current);
+
+				if (swapChain == &Device::GetSwapChain())
 					continue;
-				else if (Insert(current))
+				else if (IsValidSwapChain(swapChain))
 				{
-					logFile << current << endl;
-					if(objectCount == 1) hookD3D11Present((IDXGISwapChain*)current);
+					HookD3D11Present(swapChain);
+					return true;
 				}
-				else if(objectCount > 10)// found object for second time
-				{
-					// return true;
-				}
-				++objectCount;
 			}
 		}
 	}
+
+	MessageBox(nullptr, "finished scan", "Caption", MB_OK);
 	return false;
 }
 
 // **************************************************************** //
 
-
-#pragma data_seg (".shared")
-int		g_isHooked = 0;	// START button subclassed?
-UINT	WM_HOOKEX = 0;
-HWND	g_hWnd = 0;		// handle of START button
-HHOOK	g_hHook = 0;
-#pragma data_seg ()
 
 #pragma comment(linker,"/SECTION:.shared,RWS")
 
@@ -156,7 +143,11 @@ BOOL APIENTRY DllMain(HANDLE hModule,
 
 
 #define pCW ((CWPSTRUCT*)lParam)
-
+struct Pipes {
+	Pipes(HANDLE hIn, HANDLE hout) : hIn{ hIn }, hOut{ hOut } {}
+	HANDLE hIn;
+	HANDLE hOut;
+};
 LRESULT HookProc(
 	int code,       // hook code
 	WPARAM wParam,  // virtual-key code
@@ -180,6 +171,26 @@ LRESULT HookProc(
 
 		FindSwapChain();
 	}
+	else if (pCW->message == WM_COPYDATA) {
+		MessageBox(NULL, "myEvent", "myEvent", MB_OK);
+		PCOPYDATASTRUCT pCDS = reinterpret_cast<PCOPYDATASTRUCT>(pCW->lParam);
+		// pipeOut = (HANDLE)(pCDS->dwData);
+		Pipes pips = *reinterpret_cast<Pipes*>(pCDS->lpData);
+		pipeIn = pips.hIn;
+		pipeOut = pips.hOut;
+		PVOID pV = pCDS->lpData;
+		char meassage[255] = "test3\n1\n";
+		DWORD written;
+		sprintf_s(meassage, 255, "%d", pCDS->dwData);
+		MessageBox(NULL, meassage, "Pipe Handle", MB_OK);
+		if (!ReadFile(pipeIn, meassage, 255, NULL, NULL)
+			|| !WriteFile(pipeOut, "TestMessage ", 13, &written, NULL)) {
+			showError("PipeWriteClient Error", GetLastError());
+		} else {
+			if(written > 0)
+			MessageBox(NULL, "Send data", "Success", MB_OK);
+		}
+	}
 	else if (pCW->message == WM_HOOKEX)
 	{
 		::UnhookWindowsHookEx(g_hHook);
@@ -199,10 +210,30 @@ LRESULT HookProc(
 END:
 	return ::CallNextHookEx(g_hHook, code, wParam, lParam);
 }
-
-int InjectDll(HWND hWnd)
+COPYDATASTRUCT mCDS;
+struct WindowData {
+	unsigned long pid;
+	HWND hWnd;
+};
+BOOL isMainHandle(HWND handle) {
+	return GetWindow(handle, GW_OWNER) == (HWND)0 && IsWindowVisible(handle);
+}
+BOOL CALLBACK find_window_callback(HWND handle, LPARAM lParam) {
+	WindowData& wnd = *reinterpret_cast<WindowData*>(lParam);
+	unsigned long pid;
+	GetWindowThreadProcessId(handle, &pid);
+	if (wnd.pid != pid || !isMainHandle(handle))
+		return TRUE;
+	wnd.hWnd = handle;
+	return FALSE;
+}
+int InjectDll(HWND hWnd, HANDLE hIn, HANDLE hOut)
 {
+	pipeIn = hIn;
+	pipeOut = hOut;
 	g_hWnd = hWnd;
+
+	std::cout << "Hin" << hIn << "\nhOout" << hOut << '\n';
 
 	// Hook
 	g_hHook = SetWindowsHookEx(WH_CALLWNDPROC, (HOOKPROC)HookProc,
@@ -212,8 +243,20 @@ int InjectDll(HWND hWnd)
 
 	// By the time SendMessage returns, 
 	// the START button has already been subclassed
-	SendMessage(hWnd, WM_HOOKEX, 0, 1);
+	std::cout << "I" << (LPARAM)hIn << "\nO" << (WPARAM)hOut << "\n";
+	Pipes pips{hOut, hIn};
 	
+	mCDS.dwData = PIPES;
+	mCDS.cbData = sizeof(HANDLE);
+	mCDS.lpData = &pips;
+	WindowData myWnd;
+	myWnd.pid = GetCurrentProcessId();
+	EnumWindows(find_window_callback, (LPARAM)&myWnd);
+	SetWindowTextA(myWnd.hWnd, "Search");
+	SetWindowTextA(hWnd, "Target");
+	std::cout << "pid:" << myWnd.pid << "\thWnd:" << myWnd.hWnd << '\n';
+	SendMessage(hWnd, WM_COPYDATA, (WPARAM)(HWND)myWnd.hWnd, (LPARAM)(LPVOID)&mCDS);
+	SendMessage(hWnd, WM_HOOKEX, 0, 1);
 	return g_isHooked;
 }
 
@@ -244,3 +287,22 @@ LRESULT CALLBACK NewProc(
 {
 	return CallWindowProc(OldProc, hwnd, uMsg, wParam, lParam);
 }
+
+/* void showError(const char* caption, DWORD error) {
+	LPSTR msg = 0;
+	if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+		NULL,
+		error,
+		0,
+		(LPSTR)&msg, // muss anscheinend so, steht in der Doku
+		0,
+		NULL) == 0) {
+		MessageBox(NULL, "Cant parse Error", caption, MB_OK | MB_ICONERROR);
+		return;
+	}
+	MessageBox(NULL, msg, caption, MB_OK | MB_ICONERROR);
+	if (msg) {
+		LocalFree(msg);
+		msg = 0;
+	}
+} */

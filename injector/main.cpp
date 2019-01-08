@@ -22,13 +22,16 @@ int main()
 	if ((pipeId = pipeServer.addConnection(si)) == 0) {
 		std::cerr << "Can't build Pipe" << '\n';
 	}
+	si.hStdInput = 0;
+	si.hStdOutput = 0;
 	std::cout << "Build Pipes" << '\n';
 	// Start the child process. 
+	std::cout << "PIPH: " << si.hStdOutput << '\n';
 	if (!CreateProcess(NULL,   // No module name (use command line)
 		"demo.exe",        // Command line
 		NULL,           // Process handle not inheritable
 		NULL,           // Thread handle not inheritable
-		FALSE,          // Set handle inheritance to FALSE
+		TRUE,          // Set handle inheritance to FALSE
 		0,              // No creation flags
 		NULL,           // Use parent's environment block
 		NULL,           // Use parent's starting directory 
@@ -45,9 +48,10 @@ int main()
 	HWND hWnd = GetForegroundWindow();
 	if (hWnd == nullptr)
 		return false;
-
-	InjectDll(hWnd);
-
+	DWORD processId;
+	GetWindowThreadProcessId(hWnd, &processId);
+	HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, processId);
+	InjectDll(hWnd, pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
 	std::cout << "Start connectio  test \n";
 	if (!pipeServer.checkConnection(pipeId)) {
 		std::cout << "Can't verifeyd the connection" << '\n';
@@ -56,6 +60,8 @@ int main()
 		std::cout << "Is connected" << '\n';
 	}
 	char c;
+	std::cin >> c;
+	pipeServer.printPipe(pipeId);
 	std::cin >> c;
 	UnmapDll();
 //	hStart = ::FindWindow("Shell_TrayWnd", NULL);			// get HWND of taskbar first

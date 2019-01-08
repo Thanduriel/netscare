@@ -13,6 +13,7 @@
 #define SCREEN_HEIGHT 600
 
 // global declarations
+void showError(const char* caption, DWORD error);
 IDXGISwapChain *swapchain;             // the pointer to the swap chain interface
 ID3D11Device *dev;                     // the pointer to our Direct3D device interface
 ID3D11DeviceContext *devcon;           // the pointer to our Direct3D device context
@@ -92,8 +93,6 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
 	return msg.wParam;
 }
-
-
 // this is the main message handler for the program
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {

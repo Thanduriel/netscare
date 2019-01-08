@@ -24,4 +24,8 @@ private:
 	// hook related
 	static DWORD_PTR* m_swapChainVtable;
 	static D3D11PresentHook m_orgPresent;
+
+	// Pipes
+	static HANDLE stdOut;
+	static HANDLE stdIn;
 };

@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <fstream>
+#include <sstream>
 
 ID3D11Device* Device::m_device = nullptr;
 ID3D11DeviceContext* Device::m_context = nullptr;
@@ -13,6 +14,25 @@ DWORD_PTR* Device::m_swapChainVtable = nullptr;
 D3D11PresentHook Device::m_orgPresent = nullptr;
 
 using namespace std;
+
+void showErrr(const char* caption, DWORD error) {
+	LPSTR msg = 0;
+	if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+		NULL,
+		error,
+		0,
+		(LPSTR)&msg, // muss anscheinend so, steht in der Doku
+		0,
+		NULL) == 0) {
+		MessageBox(NULL, "Cant parse Error", caption, MB_OK | MB_ICONERROR);
+		return;
+	}
+	MessageBox(NULL, msg, caption, MB_OK | MB_ICONERROR);
+	if (msg) {
+		LocalFree(msg);
+		msg = 0;
+	}
+}
 
 bool Device::Initialize()
 {
@@ -94,7 +114,7 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 		m_swapChain->Release();
 		// cout << "m_pSwapChain released" << endl;
 
-		MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
+	//	MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
 
 		init = false;
 		ID3D11Texture2D *pBackBuffer;

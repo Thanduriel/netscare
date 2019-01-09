@@ -51,6 +51,13 @@ int main()
 	DWORD processId;
 	GetWindowThreadProcessId(hWnd, &processId);
 	HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, processId);
+	char msg[] = "Hello, World!\n";
+	WriteTask<char*> wT(msg, msg + 16);
+	pipeServer.addTask(pipeId, wT);
+	std::cout << "added Task\n";
+	if (wT.getState(TRUE) == Task<char*>::FAILED) {
+		std::cerr << "Failed To Use Pipe\n";
+	}
 	InjectDll(hWnd, pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
 	std::cout << "Start connectio  test \n";
 	if (!pipeServer.checkConnection(pipeId)) {

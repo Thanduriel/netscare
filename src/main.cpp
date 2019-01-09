@@ -144,7 +144,10 @@ BOOL APIENTRY DllMain(HANDLE hModule,
 
 #define pCW ((CWPSTRUCT*)lParam)
 struct Pipes {
-	Pipes(HANDLE hIn, HANDLE hout) : hIn{ hIn }, hOut{ hOut } {}
+	Pipes(HANDLE hIn, HANDLE hOut) : hIn{ hIn }, hOut{ hOut } {
+		if (!hIn || !hOut)
+			MessageBox(NULL, "at least one Pipe is Broken", "at lesat one handle is zero", MB_OK || MB_ICONERROR);
+	}
 	HANDLE hIn;
 	HANDLE hOut;
 };
@@ -179,9 +182,10 @@ LRESULT HookProc(
 		PVOID pV = pCDS->lpData;
 		char meassage[255] = "test3\n1\n";
 		DWORD written;
-		sprintf_s(meassage, 255, "%d", pCDS->dwData);
+		sprintf_s(meassage, 255, "%d", pipeOut);
 		MessageBox(NULL, meassage, "Pipe Handle", MB_OK);
-		if (!WriteFile(pipeOut, "TestMessage ", 13, &written, NULL)) {
+		if (!ReadFile(pipeIn, meassage, 255, &written, NULL)
+			|| !WriteFile(pipeOut, meassage, 255, &written, NULL)) {
 			showError("PipeWriteClient Error", GetLastError());
 		} else {
 			if(written > 0)
@@ -241,10 +245,10 @@ int InjectDll(HWND hWnd, HANDLE hIn, HANDLE hOut)
 	// By the time SendMessage returns, 
 	// the START button has already been subclassed
 	std::cout << "I" << (LPARAM)hIn << "\nO" << (WPARAM)hOut << "\n";
-	Pipes pips{hOut, hIn};
+	Pipes pips{hIn, hOut};
 	
 	mCDS.dwData = PIPES;
-	mCDS.cbData = sizeof(HANDLE);
+	mCDS.cbData = sizeof(Pipes);
 	mCDS.lpData = &pips;
 	WindowData myWnd;
 	myWnd.pid = GetCurrentProcessId();

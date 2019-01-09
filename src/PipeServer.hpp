@@ -40,8 +40,8 @@ class Task {
 public:
 	enum TASK_TYPE {READ, WRITE};
 	enum STATUS_CODE { SUCCESS, NOT_STARTED, PENDING, FAILED, ERROR_TO_SHORT};
-	Task(const TASK_TYPE type, T begin, T end) : type{ type }, pipe{ 0 }, begin{ begin }, end{ end } {
-		overlap.hEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
+	Task(const TASK_TYPE type, T begin, T end) : type{ type }, pipe{ 0 }, begin{ begin }, end{ end }, overlap{ 0 } {
+		overlap.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 		if (!overlap.hEvent) {
 			showError("Create EventHandler failed!", GetLastError());
 		}
@@ -90,6 +90,7 @@ protected:
 	bool bStarted;
 	bool bFailed;
 	void update(BOOL wait = FALSE) {
+		if (!fPending) return;
 		BOOL bFin = GetOverlappedResult(pipe, &overlap, &length, wait);
 		DWORD lastError = GetLastError();
 		if (!bFin) {

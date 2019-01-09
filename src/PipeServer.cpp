@@ -75,18 +75,50 @@ bool PipeServer::checkConnection(std::size_t id) {
 }
 PipeServer::Pipe::Pipe(DWORD bufferSize)
 {
+	static std::size_t pipeNumber = 0;
 	SECURITY_ATTRIBUTES sa;
 	sa.nLength = sizeof(SECURITY_ATTRIBUTES);
 	sa.bInheritHandle = TRUE;
 	sa.lpSecurityDescriptor = NULL;
 
-	if (!CreatePipe(&hRead, &hWrite, &sa, bufferSize)) {
+	/* if (!CreatePipe(&hRead, &hWrite, &sa, bufferSize)) {
 		DWORD error = GetLastError();
 		showError("Pipe Creation Failed", error);
 		fBroken = true;
 		return;
+	} */
+
+	char pipeName[255];
+	sprintf_s(pipeName, "\\\\.\\Pipe\\NetScare.%08x.%08x", GetCurrentProcessId(), pipeNumber++);
+	hRead = CreateNamedPipeA(
+		pipeName,
+		PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+		PIPE_TYPE_BYTE | PIPE_WAIT,
+		1,
+		BUFSIZE,
+		BUFSIZE,
+		120 * 1000,
+		&sa
+	);
+	if (hRead == INVALID_HANDLE_VALUE) {
+		showError("Cant Craete Named pipe", GetLastError());
+		fBroken = true;
 	}
-	
+
+	hWrite = CreateFileA(
+		pipeName,
+		GENERIC_WRITE,
+		0,
+		&sa,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+		NULL
+	);
+
+	if (hWrite == INVALID_HANDLE_VALUE) {
+		fBroken = true;
+		showError("Cat craete File to read", GetLastError());
+	}
 	char text[25] = "helle";
 	char res[25];
 	DWORD length, length2;

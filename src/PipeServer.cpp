@@ -58,7 +58,7 @@ std::size_t PipeServer::addConnection()
 }
 
 bool PipeServer::checkId(std::size_t id) {
-	if (id == 0 || id >= _pipes.size()) {
+	if (id >= _pipes.size()) {
 		MessageBox(NULL, "Out of range Accsess", "PipeServer wrong Id", MB_OK | MB_ICONWARNING);
 		return false;
 	}

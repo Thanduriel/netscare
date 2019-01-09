@@ -60,11 +60,11 @@ int main()
 		std::cout << "Is connected" << '\n';
 	}
 	char c;
-	std::cin >> c;
-	char* m = "Hello, World!";
-	std::vector<char> res{ 25, 0 };
-	WriteTask<char*> wT{m, m+14};
-	pipeServer.addTask<char*>(pipeId, wT);
+	// std::cin >> c;
+	// char* m = "Hello, World!";
+	// std::vector<char> res{ 25, 0 };
+	// WriteTask<char*> wT{m, m+14};
+	// pipeServer.addTask<char*>(pipeId, wT);
 	std::cin >> c;
 	pipeServer.printPipe(pipeId);
 	std::cin >> c;

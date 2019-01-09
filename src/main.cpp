@@ -172,9 +172,7 @@ LRESULT HookProc(
 		FindSwapChain();
 	}
 	else if (pCW->message == WM_COPYDATA) {
-		MessageBox(NULL, "myEvent", "myEvent", MB_OK);
 		PCOPYDATASTRUCT pCDS = reinterpret_cast<PCOPYDATASTRUCT>(pCW->lParam);
-		// pipeOut = (HANDLE)(pCDS->dwData);
 		Pipes pips = *reinterpret_cast<Pipes*>(pCDS->lpData);
 		pipeIn = pips.hIn;
 		pipeOut = pips.hOut;
@@ -183,8 +181,7 @@ LRESULT HookProc(
 		DWORD written;
 		sprintf_s(meassage, 255, "%d", pCDS->dwData);
 		MessageBox(NULL, meassage, "Pipe Handle", MB_OK);
-		if (!ReadFile(pipeIn, meassage, 255, NULL, NULL)
-			|| !WriteFile(pipeOut, "TestMessage ", 13, &written, NULL)) {
+		if (!WriteFile(pipeOut, "TestMessage ", 13, &written, NULL)) {
 			showError("PipeWriteClient Error", GetLastError());
 		} else {
 			if(written > 0)

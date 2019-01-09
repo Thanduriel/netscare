@@ -19,7 +19,7 @@ int main()
 
 	PipeServer pipeServer{};
 	std::size_t pipeId = 0;
-	if ((pipeId = pipeServer.addConnection(si)) == 0) {
+	if ((pipeId = pipeServer.addConnection()) == 0) {
 		std::cerr << "Can't build Pipe" << '\n';
 	}
 	si.hStdInput = 0;
@@ -60,6 +60,11 @@ int main()
 		std::cout << "Is connected" << '\n';
 	}
 	char c;
+	std::cin >> c;
+	char* m = "Hello, World!";
+	std::vector<char> res{ 25, 0 };
+	WriteTask<char*> wT{m, m+14};
+	pipeServer.addTask<char*>(pipeId, wT);
 	std::cin >> c;
 	pipeServer.printPipe(pipeId);
 	std::cin >> c;

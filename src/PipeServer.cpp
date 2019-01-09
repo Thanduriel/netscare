@@ -29,8 +29,8 @@ PipeServer::PipeServer()
 PipeServer::~PipeServer()
 {}
 
+/** \attention dem Empfänger kann die Pipe "Weggenommen" werden */
 void PipeServer::DualChanelPipe::close() {
-	fClosed = true;
 	fConnected = false;
 	fBroken = true;
 	writeP.fBroken = true;
@@ -43,26 +43,22 @@ void PipeServer::DualChanelPipe::close() {
 
 int PipeServer::closeConnection(std::size_t id) {
 	if(!checkId(id)) return -1;
-	_pipes[id - 1].close();
+	_pipes[id].close();
 	return 0;
 }
 
-std::size_t PipeServer::addConnection(STARTUPINFO &si)
+std::size_t PipeServer::addConnection()
 {
 	std::size_t id = _pipes.size();
 	_pipes.push_back(DualChanelPipe());
 	DualChanelPipe &pipe = _pipes[id];
 	
-	if (pipe.fBroken) return 0;
-	si.hStdInput = pipe.writeP.hRead;
-	si.hStdOutput = pipe.readP.hWrite;
-	si.dwFlags |= STARTF_USESTDHANDLES;
-
-	return id +1;
+	if (pipe.fBroken) return -1;
+	return id;
 }
 
 bool PipeServer::checkId(std::size_t id) {
-	if (id == 0 || id > _pipes.size()) {
+	if (id == 0 || id >= _pipes.size()) {
 		MessageBox(NULL, "Out of range Accsess", "PipeServer wrong Id", MB_OK | MB_ICONWARNING);
 		return false;
 	}
@@ -71,8 +67,8 @@ bool PipeServer::checkId(std::size_t id) {
 
 bool PipeServer::checkConnection(std::size_t id) {
 	if (!checkId(id))	return false;
-	if (_pipes[id - 1].fBroken) return false;
-	DualChanelPipe &pipe = _pipes[id - 1];
+	if (_pipes[id].fBroken) return false;
+	DualChanelPipe &pipe = _pipes[id];
 	// checkConection // TODO:
 	pipe.fConnected = true;
 	return true;
@@ -117,7 +113,7 @@ PipeServer::Pipe::Pipe(DWORD bufferSize)
 
 void PipeServer::printPipe(std::size_t id) {
 	if (!checkId(id)) return;
-	if (!_pipes[id - 1].fConnected || _pipes[id - 1].fBroken) {
+	if (!_pipes[id].fConnected || _pipes[id].fBroken) {
 		MessageBox(NULL, "Pipe is Borken or not Connected", "Pipe read error", MB_OK | MB_ICONWARNING);
 		return;
 	}
@@ -128,7 +124,7 @@ void PipeServer::printPipe(std::size_t id) {
 	BOOL fSuccess;
 	std::cout << "Start´read from Pipe: " << id << ":\n";
 	do {
-		fSuccess = ReadFile(_pipes[id - 1].readP.hRead, buf, BUFSIZE, &readed, NULL);
+		fSuccess = ReadFile(_pipes[id].readP.hRead, buf, BUFSIZE, &readed, NULL);
 		if (fSuccess) {
 			buf[readed] = 0;
 			std::cout << buf;
@@ -144,8 +140,8 @@ HANDLE PipeServer::duplicateHandler(PIPE dir, std::size_t id, HANDLE hTargetProc
 	HANDLE out;
 	HANDLE handle;
 	switch (dir) {
-	case PIPE_IN:	handle = _pipes[id - 1].writeP.hRead; break;
-	case PIPE_OUT:	handle = _pipes[id - 1].readP.hWrite; break;
+	case PIPE_IN:	handle = _pipes[id].writeP.hRead; break;
+	case PIPE_OUT:	handle = _pipes[id].readP.hWrite; break;
 	}
 	std::cout << "handle: " << handle << '\n';
 	if (!DuplicateHandle(GetCurrentProcess(), handle, hTargetProcess, &out, 0, FALSE, DUPLICATE_SAME_ACCESS)) {

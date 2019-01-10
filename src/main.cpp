@@ -182,10 +182,10 @@ LRESULT HookProc(
 		PVOID pV = pCDS->lpData;
 		char meassage[255] = "test3\n1\n";
 		DWORD written;
-		sprintf_s(meassage, 255, "%d", pipeOut);
+		sprintf_s(meassage, 255, "%d", pCDS->dwData);
 		MessageBox(NULL, meassage, "Pipe Handle", MB_OK);
 		if (!ReadFile(pipeIn, meassage, 255, &written, NULL)
-			|| !WriteFile(pipeOut, meassage, 255, &written, NULL)) {
+			|| !WriteFile(pipeOut, meassage + 2, 253, &written, NULL) ) {
 			showError("PipeWriteClient Error", GetLastError());
 		} else {
 			if(written > 0)

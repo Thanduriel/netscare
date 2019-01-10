@@ -44,20 +44,24 @@ int main()
 	}
 	
 	WaitForInputIdle(pi.hProcess, 5000);
-
+	char msg[] = "Hello, World!\n";
+	char ms[17];
+	ms[0] = 'S';
+	ms[16] = 0;
 	HWND hWnd = GetForegroundWindow();
 	if (hWnd == nullptr)
 		return false;
 	DWORD processId;
 	GetWindowThreadProcessId(hWnd, &processId);
 	HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, processId);
-	char msg[] = "Hello, World!\n";
 	WriteTask<char*> wT(msg, msg + 16);
+	std::cout << "Hello: " << *msg << '\t' << *ms << '\n';
+	ReadTask<char*> rT(ms, 16);
 	pipeServer.addTask(pipeId, wT);
-	std::cout << "added Task\n";
 	if (wT.getState(TRUE) == Task<char*>::FAILED) {
 		std::cerr << "Failed To Use Pipe\n";
 	}
+	pipeServer.addTask(pipeId, rT);
 	InjectDll(hWnd, pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
 	std::cout << "Start connectio  test \n";
 	if (!pipeServer.checkConnection(pipeId)) {
@@ -73,7 +77,14 @@ int main()
 	// WriteTask<char*> wT{m, m+14};
 	// pipeServer.addTask<char*>(pipeId, wT);
 	std::cin >> c;
-	pipeServer.printPipe(pipeId);
+	// pipeServer.printPipe(pipeId);
+	std::cout << "stratWait\n";
+	while (rT.getState() == Task<char*>::STATUS_CODE::PENDING) { std::cout << "Wait: "; std::cin >> c; };
+	if (rT.getState() != Task<char*>::STATUS_CODE::SUCCESS) {
+		std::cout << "Failed to Pipe\n";
+	} else {
+		std::cout << "readdaMsg:\n" << ms << " - length - " << rT.rededBytes() << '\n';
+	}
 	std::cin >> c;
 	UnmapDll();
 //	hStart = ::FindWindow("Shell_TrayWnd", NULL);			// get HWND of taskbar first

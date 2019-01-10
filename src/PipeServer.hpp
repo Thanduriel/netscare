@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <Windows.h>
+#include <type_traits>
 
 /** check for itretaor type https://isocpp.org/files/papers/N3911.pdf */
 /* template<typename...>
@@ -18,6 +19,7 @@ struct is_itrator<T,
 
 template <typename T> /**< char random access iterator*/
 class Task {
+	// static_assert(is_pointer<T>::value);
 	void showError(const char* caption, DWORD error) {
 		LPSTR msg = 0;
 		if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
@@ -41,6 +43,7 @@ public:
 	enum TASK_TYPE {READ, WRITE};
 	enum STATUS_CODE { SUCCESS, NOT_STARTED, PENDING, FAILED, ERROR_TO_SHORT};
 	Task(const TASK_TYPE type, T begin, T end) : type{ type }, pipe{ 0 }, begin{ begin }, end{ end }, overlap{ 0 } {
+		std::cout << "Create Check: " << *begin << "\n";
 		overlap.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 		if (!overlap.hEvent) {
 			showError("Create EventHandler failed!", GetLastError());
@@ -52,6 +55,10 @@ public:
 	}
 	void setPipeHandle(HANDLE pipe) { this->pipe = pipe; }
 	bool start() {
+		HANDLE hEvent = overlap.hEvent;
+		overlap = {0};
+		overlap.hEvent = hEvent;
+		ResetEvent(overlap.hEvent);
 		bStarted = true;
 		switch (type){
 		case WRITE: {
@@ -66,7 +73,9 @@ public:
 			}
 		} break;
 		case READ: {
+			std::cout << "Check: " << *begin << "\n";
 			BOOL bFin = ReadFile(pipe, begin, end - begin, &length, &overlap);
+			std::cout << "OverlapStat: " << overlap.Internal << "\n";
 			DWORD lastError = GetLastError();
 			if (!bFin) {
 				if (lastError == ERROR_IO_PENDING) fPending = true;
@@ -91,15 +100,21 @@ protected:
 	bool bFailed;
 	void update(BOOL wait = FALSE) {
 		if (!fPending) return;
+		BOOL bWork = WaitForSingleObject(overlap.hEvent, 0);
+		if (bWork) return;
 		BOOL bFin = GetOverlappedResult(pipe, &overlap, &length, wait);
 		DWORD lastError = GetLastError();
 		if (!bFin) {
-			if (lastError == ERROR_IO_PENDING) fPending = true;
+			if (lastError == ERROR_IO_PENDING) {
+				MessageBox(NULL, "Something is stragene, not wrkin but bussy", "Logic Hole", MB_OK | MB_ICONERROR);
+				fPending = true;
+			}
 			else {
 				showError("Failed Update", lastError);
 				bFailed = true;
 			}
 		} else {
+			if (!length) bFailed = true;
 			fPending = false;
 		}
 	}
@@ -127,7 +142,7 @@ private:
 template <typename T>
 class ReadTask : public Task<T> {
 public:
-	ReadTask(T buffer, std::size_t length) : Task(Task::TASK_TYPE::READ, begin, end) {}
+	ReadTask(T buffer, std::size_t length) : Task{ Task::TASK_TYPE::READ, buffer, buffer + length } {}
 	Task::STATUS_CODE getState(BOOL wait = FALSE) final {
 		update(wait);
 		if (bFailed) return Task::STATUS_CODE::FAILED;

@@ -86,7 +86,7 @@ public:
 			}
 		} break;
 		}
-		return !(fPending || bFailed);
+		return fPending || bFailed;
 	}
 	virtual STATUS_CODE getState(BOOL wait = FALSE) = 0;
 	const TASK_TYPE type;
@@ -166,6 +166,7 @@ public:
 	bool checkConnection(std::size_t id);
 	void printPipe(std::size_t id);
 	HANDLE duplicateHandler(PIPE dir, std::size_t id, HANDLE hTargetProcess);
+	/** \return false if task finished \return true is task is panding or failed */
 	template <typename T>
 	bool addTask(std::size_t id, Task<T>& task) { return _pipes[id].addTask<T>(task); }
 private:
@@ -196,8 +197,7 @@ private:
 				task.setPipeHandle(readP.hRead);
 			else if (task.type == Task<T>::TASK_TYPE::WRITE)
 				task.setPipeHandle(writeP.hWrite);
-			task.start();
-			return true;
+			return task.start();
 		}
 		Pipe readP, writeP;
 		BOOL fConnected, fBroken;

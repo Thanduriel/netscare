@@ -30,5 +30,6 @@ target_link_libraries(netscare directXTK)
 
 add_executable(injector injector/main.cpp src/PipeServer.cpp)
 target_link_libraries(injector netscare)
+set_property(TARGET injector PROPERTY WIN32_EXECUTABLE true)
 
 add_executable(demo WIN32 demo/X11FullScreen.cpp)

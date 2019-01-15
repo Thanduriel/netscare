@@ -1,6 +1,7 @@
 #include "d3dhook.hpp"
 #include "effect.hpp"
 #include "texture.hpp"
+#include "PipeServer.hpp"
 
 #include <d3d.h>
 #include <d3d11.h>
@@ -21,6 +22,10 @@ public:
 	static IDXGISwapChain& GetSwapChain() { assert(m_swapChain); return *m_swapChain; }
 
 	static const DirectX::CommonStates* GetCommonStates() { return m_commonStates; }
+
+	static void SetPipeNode(PipeNode&& node) {
+		m_pipeNode = node;
+	};
 private:
 	static void Draw();
 	static void InitializeParent(IDXGISwapChain* _this);
@@ -40,6 +45,5 @@ private:
 	static D3D11PresentHook m_orgPresent;
 
 	// Pipes
-	static HANDLE stdOut;
-	static HANDLE stdIn;
+	static PipeNode m_pipeNode;
 };

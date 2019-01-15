@@ -6,9 +6,29 @@
 
 HWND hStart;		// handle to start button
 
-BOOL CALLBACK MainDlgProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK MainWinProc(HWND, UINT, WPARAM, LPARAM);
 
-int main()
+static void showError(const char* caption, DWORD error) {
+	LPSTR msg = 0;
+	if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+		NULL,
+		error,
+		0,
+		(LPSTR)&msg, // muss anscheinend so, steht in der Doku
+		0,
+		NULL) == 0) {
+		MessageBox(NULL, "Cant parse Error", caption, MB_OK | MB_ICONERROR);
+		return;
+	}
+	MessageBox(NULL, msg, caption, MB_OK | MB_ICONERROR);
+	if (msg) {
+		LocalFree(msg);
+		msg = 0;
+	}
+}
+
+
+int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmdshow)
 {
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
@@ -70,83 +90,77 @@ int main()
 	else {
 		std::cout << "Is connected" << '\n';
 	}
-	char c;
-	// std::cin >> c;
-	// char* m = "Hello, World!";
-	// std::vector<char> res{ 25, 0 };
-	// WriteTask<char*> wT{m, m+14};
-	// pipeServer.addTask<char*>(pipeId, wT);
-	std::cin >> c;
-	// pipeServer.printPipe(pipeId);
-	std::cout << "stratWait\n";
-	while (rT.getState() == Task<char*>::STATUS_CODE::PENDING) { std::cout << "Wait: "; std::cin >> c; };
-	if (rT.getState() != Task<char*>::STATUS_CODE::SUCCESS) {
+	if (rT.getState(TRUE) != Task<char*>::STATUS_CODE::SUCCESS) {
 		std::cout << "Failed to Pipe\n";
 	} else {
 		std::cout << "readdaMsg:\n" << ms << " - length - " << rT.rededBytes() << '\n';
 	}
-	std::cin >> c;
-	UnmapDll();
-//	hStart = ::FindWindow("Shell_TrayWnd", NULL);			// get HWND of taskbar first
-//	hStart = ::FindWindowEx(hStart, NULL, "BUTTON", NULL);	// get HWND of start button
-	// display main dialog 
-//	::DialogBoxParam(hInstance, MAKEINTRESOURCE(IDD_WININFO), NULL, MainDlgProc, NULL);
 
+	WNDCLASSW winC = { 0 };
+	winC.hCursor = LoadCursor(NULL, IDC_ARROW);
+	winC.hbrBackground = (HBRUSH)COLOR_WINDOW;
+	winC.hInstance = hInst;
+	winC.lpszClassName = L"MainWindow";
+	winC.lpfnWndProc = MainWinProc;
+
+	if (!RegisterClassW(&winC)) {
+		std::cerr << "Can't register winC\n";
+		UnmapDll();
+		return -1;
+	}
+
+	HWND hINPUT = CreateWindowW(L"MainWindow", L"NetScare", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 500, 500, NULL, NULL, NULL, NULL);
+
+	MSG winMsg = { 0 };
+	while (GetMessage(&winMsg, NULL, NULL, NULL)) {
+		TranslateMessage(&winMsg);
+		if (winMsg.message == WM_KEYDOWN && winMsg.wParam == VK_RETURN)
+			SendMessageW(hINPUT, winMsg.message, winMsg.wParam, winMsg.wParam);
+		else
+			DispatchMessageW(&winMsg);
+	}
+
+	UnmapDll();
 	return 0;
 }
 
+void addUI(HWND hWnd, HWND& hColor) {
+	CreateWindowW(L"static", L"Color(r,g,b): ", WS_VISIBLE | WS_CHILD, 10, 10, 100, 20, hWnd, NULL, NULL, NULL);
+	hColor = CreateWindowW(L"edit", L"255,255,255", WS_VISIBLE | WS_CHILD, 110, 10, 100, 20, hWnd, NULL, NULL, NULL);
+}
 
-//-----------------------------------------------
-// MainDlgProc
-// Notice: dialog procedure
-//
-BOOL CALLBACK MainDlgProc(HWND hDlg,	// handle to dialog box
-	UINT uMsg,      // message
-	WPARAM wParam,  // first message parameter
-	LPARAM lParam) // second message parameter
-{
-/*	static int bChecked = false;
-
-	switch (uMsg) {
-
-	case WM_INITDIALOG:
-		::SetTimer(hDlg, 101, 300, NULL);
-		return true;
-
-		// if running more instances of HookInjEx, 
-		// keep their interface consistent
-	case WM_TIMER:
-		bChecked = (IsDlgButtonChecked(hDlg, IDC_BUTTON) == BST_CHECKED);
-		if (g_bSubclassed && !bChecked) {
-			::CheckDlgButton(hDlg, IDC_BUTTON, BST_CHECKED);
-			::SetDlgItemText(hDlg, IDC_BUTTON, "Unmap Dll");
-		}
-		else if (!g_bSubclassed && bChecked) {
-			::CheckDlgButton(hDlg, IDC_BUTTON, BST_UNCHECKED);
-			::SetDlgItemText(hDlg, IDC_BUTTON, "Inject Dll");
-		}
+LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	static HWND hColor;
+	switch (msg) {
+	case WM_CREATE:
+		addUI(hWnd, hColor);
 		break;
-
 	case WM_COMMAND:
-		if (!g_bSubclassed) {
-			InjectDll(hStart);
-			if (g_bSubclassed)
-				::SetDlgItemText(hDlg, IDC_BUTTON, "Unmap Dll");
-		}
-		else {
-			UnmapDll();
-			if (!g_bSubclassed)
-				::SetDlgItemText(hDlg, IDC_BUTTON, "Inject Dll");
+		switch (wParam)
+		{
+		default:
+			break;
 		}
 		break;
-
-	case WM_CLOSE:
-		if (g_bSubclassed)
-			UnmapDll();
-
-		::EndDialog(hDlg, 0);
+	case WM_KEYDOWN:
+		
+		switch (wParam) {
+		case VK_RETURN:
+		{
+			wchar_t text[32];
+			if (!GetWindowTextW(hColor, text, 32)) {
+				showError("SetError", GetLastError());
+			}
+			SetWindowTextW(hWnd, text);
+		}
 		break;
-	}*/
-
-	return false;
+		}
+		break;
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		break;
+		return 0;
+	default:
+		return DefWindowProcW(hWnd, msg, wParam, lParam);
+	}
 }

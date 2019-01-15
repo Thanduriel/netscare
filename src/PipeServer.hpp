@@ -153,6 +153,23 @@ public:
 	std::size_t rededBytes() { return length; }
 };
 
+class PipeNode
+{
+	HANDLE pIn, pOut;
+public:
+	PipeNode(HANDLE hIn, HANDLE hOut) : pIn{ hIn }, pOut{ hOut } {}
+	PipeNode() : pIn{ 0 }, pOut{ 0 } {}
+	template<typename T>
+	bool addTask(Task<T>& task) { 
+		if (task.type == Task<T>::TASK_TYPE::READ) {
+			task.setPipeHandle(pIn);
+		} else if (task.type == Task<T>::TASK_TYPE::WRITE) {
+			task.setPipeHandle(pOut);
+		}
+		return task.start();
+	}
+};
+
 class PipeServer
 {
 public:

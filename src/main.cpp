@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 #include "hook.hpp"
 #include "interface.hpp"
+#include "PipeServer.hpp"
 
 #include <windows.h>
 #include <stdio.h>
@@ -23,8 +24,6 @@ int		g_isHooked = 0;	// START button subclassed?
 UINT	WM_HOOKEX = 0;
 HWND	g_hWnd = 0;		// handle of START button
 HHOOK	g_hHook = 0;
-HANDLE	pipeIn;
-HANDLE	pipeOut;
 #pragma data_seg ()
 
 bool IsValidSwapChain(IDXGISwapChain* pSwapChain)
@@ -177,19 +176,13 @@ LRESULT HookProc(
 	else if (pCW->message == WM_COPYDATA) {
 		PCOPYDATASTRUCT pCDS = reinterpret_cast<PCOPYDATASTRUCT>(pCW->lParam);
 		Pipes pips = *reinterpret_cast<Pipes*>(pCDS->lpData);
-		pipeIn = pips.hIn;
-		pipeOut = pips.hOut;
+		Device::SetPipeNode(PipeNode(pips.hIn, pips.hOut));
 		PVOID pV = pCDS->lpData;
 		char meassage[255] = "test3\n1\n";
 		DWORD written;
-		sprintf_s(meassage, 255, "%d", pCDS->dwData);
-		MessageBox(NULL, meassage, "Pipe Handle", MB_OK);
-		if (!ReadFile(pipeIn, meassage, 255, &written, NULL)
-			|| !WriteFile(pipeOut, meassage + 2, 253, &written, NULL) ) {
+		if (!ReadFile(pips.hIn, meassage, 255, &written, NULL)
+			|| !WriteFile(pips.hOut, meassage + 2, 253, &written, NULL) ) {
 			showError("PipeWriteClient Error", GetLastError());
-		} else {
-			if(written > 0)
-			MessageBox(NULL, "Send data", "Success", MB_OK);
 		}
 	}
 	else if (pCW->message == WM_HOOKEX)
@@ -230,8 +223,6 @@ BOOL CALLBACK find_window_callback(HWND handle, LPARAM lParam) {
 }
 int InjectDll(HWND hWnd, HANDLE hIn, HANDLE hOut)
 {
-	pipeIn = hIn;
-	pipeOut = hOut;
 	g_hWnd = hWnd;
 
 	std::cout << "Hin" << hIn << "\nhOout" << hOut << '\n';

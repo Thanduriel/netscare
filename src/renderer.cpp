@@ -16,6 +16,8 @@ const Texture* Device::m_texture = nullptr;
 DWORD_PTR* Device::m_swapChainVtable = nullptr;
 D3D11PresentHook Device::m_orgPresent = nullptr;
 
+PipeNode Device::m_pipeNode{};
+
 using namespace std;
 
 void showErrr(const char* caption, DWORD error) {

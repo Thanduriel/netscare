@@ -91,6 +91,8 @@ bool Device::Initialize()
 
 HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 {
+	static unsigned char rgba[4] = {255, 0, 0, 255};
+	static ReadTask<unsigned char*> rT(rgba, 4);
 	static bool init = true;
 	if (init)
 	{
@@ -98,7 +100,15 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 		InitializeParent(This);
 	}
 
-	float color[] = { 1.f, 0.f, 0.f, 1.f };
+	if (rT.getState() != rT.PENDING) {
+		m_pipeNode.addTask(rT);
+	}
+
+	float color[] = {
+		static_cast<float>(rgba[0]) / 255.f,
+		static_cast<float>(rgba[1]) / 255.f,
+		static_cast<float>(rgba[2]) / 255.f,
+		static_cast<float>(rgba[3]) / 255.f};
 	m_context->ClearRenderTargetView(m_backbuffer, color);
 	Draw();
 	

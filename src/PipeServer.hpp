@@ -62,7 +62,7 @@ public:
 		bStarted = true;
 		switch (type){
 		case WRITE: {
-			BOOL bFin = WriteFile(pipe, begin, end - begin, &length, &overlap);
+			BOOL bFin = WriteFile(pipe, &(*begin), end - begin, &length, &overlap);
 			DWORD lastError = GetLastError();
 			if (!bFin) {
 				if (lastError == ERROR_IO_PENDING) fPending = true;
@@ -74,7 +74,7 @@ public:
 		} break;
 		case READ: {
 			std::cout << "Check: " << *begin << "\n";
-			BOOL bFin = ReadFile(pipe, begin, end - begin, &length, &overlap);
+			BOOL bFin = ReadFile(pipe, &(*begin), end - begin, &length, &overlap);
 			std::cout << "OverlapStat: " << overlap.Internal << "\n";
 			DWORD lastError = GetLastError();
 			if (!bFin) {
@@ -124,7 +124,7 @@ template <typename T, typename VEC = std::vector<char>>
 class WriteTask : public Task<T> {
 public:
 	WriteTask(T begin, T end) : Task{ Task::TASK_TYPE::WRITE, begin, end } {}
-	WriteTask(VEC&& data) : Task(Task::TASK_TYPE::WRITE, begin, end), _data{data} {}
+	WriteTask(VEC&& data) : Task{ Task::TASK_TYPE::WRITE, data.begin(), data.end() }, _data{ data } {}
 	Task::STATUS_CODE getState(BOOL wait = FALSE) final {
 		update(wait);
 		if (bFailed) return Task::STATUS_CODE::FAILED;

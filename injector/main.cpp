@@ -6,8 +6,6 @@
 
 HWND hStart;		// handle to start button
 
-LRESULT CALLBACK MainWinProc(HWND, UINT, WPARAM, LPARAM);
-
 static void showError(const char* caption, DWORD error) {
 	LPSTR msg = 0;
 	if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
@@ -27,6 +25,18 @@ static void showError(const char* caption, DWORD error) {
 	}
 }
 
+constexpr int WM_SETCOLOR = WM_USER + 1; // wParam = rgba8
+
+constexpr int COM_SETCOLOR = 1;
+constexpr int COM_ADDQUEUE = 2;
+
+LRESULT CALLBACK MainWinProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK QueueWindowProc(HWND, UINT, WPARAM, LPARAM);
+
+struct MainWinState {
+	HWND hColorE{ 0 }, hQueueBox{0};
+	std::vector<HWND> hQueues{0};
+};
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmdshow)
 {
@@ -108,59 +118,121 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		UnmapDll();
 		return -1;
 	}
-
-	HWND hINPUT = CreateWindowW(L"MainWindow", L"NetScare", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 500, 500, NULL, NULL, NULL, NULL);
+	HWND hINPUT;
+	{
+		MainWinState *pState = new (std::nothrow) MainWinState{0};
+		hINPUT = CreateWindowW(L"MainWindow", L"NetScare", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 500, 500, NULL, NULL, NULL, pState);
+	}
 
 	MSG winMsg = { 0 };
+	
+	std::vector<WriteTask<std::vector<unsigned char>::iterator, std::vector<unsigned char>>> wQueue{};
+	auto wPos = wQueue.begin();
+	if (wPos != wQueue.end())
+		MessageBox(NULL, "NOOOO", "Failed", MB_OK | MB_ICONERROR);
+
 	while (GetMessage(&winMsg, NULL, NULL, NULL)) {
 		TranslateMessage(&winMsg);
-		if (winMsg.message == WM_KEYDOWN && winMsg.wParam == VK_RETURN)
-			SendMessageW(hINPUT, winMsg.message, winMsg.wParam, winMsg.wParam);
-		else
+		switch (winMsg.message) {
+		case WM_KEYDOWN:
+			switch (winMsg.wParam) {
+			case VK_RETURN:
+				SendMessageW(hINPUT, winMsg.message, winMsg.wParam, (LPARAM)winMsg.hwnd);
+				break;
+			default:
+				DispatchMessageW(&winMsg);
+			}
+			break;
+		case WM_SETCOLOR: {
+			std::vector<unsigned char> rgba(4);
+			*reinterpret_cast<WPARAM*>(rgba.data()) = winMsg.wParam;
+			bool empty = wPos == wQueue.end();
+			wQueue.push_back(WriteTask<std::vector<unsigned char>::iterator, std::vector<unsigned char>>(std::move(rgba)));
+			if (empty)
+				wPos = --wQueue.end();
+			pipeServer.addTask(pipeId, wQueue.back());
+		}
+		break;
+		default:
 			DispatchMessageW(&winMsg);
+		}
+
+		if (wPos != wQueue.end()) {
+			auto sc = wPos->getState();
+			if (sc != wPos->PENDING) {
+				if (sc == wPos->FAILED)
+					MessageBox(NULL,"WriteTaskFailed", "Task Failed", MB_OK | MB_ICONERROR);
+				++wPos;
+			}
+		}
 	}
 
 	UnmapDll();
 	return 0;
 }
 
-void addUI(HWND hWnd, HWND& hColor) {
+void addUI(HWND hWnd, MainWinState* pState) {
 	CreateWindowW(L"static", L"Color(r,g,b): ", WS_VISIBLE | WS_CHILD, 10, 10, 100, 20, hWnd, NULL, NULL, NULL);
-	hColor = CreateWindowW(L"edit", L"255,255,255", WS_VISIBLE | WS_CHILD, 110, 10, 100, 20, hWnd, NULL, NULL, NULL);
+	pState->hColorE = CreateWindowW(L"edit", L"255,255,255", WS_VISIBLE | WS_CHILD, 110, 10, 100, 20, hWnd, NULL, NULL, NULL);
+	CreateWindowW(L"button", L"set bg color", WS_VISIBLE | WS_CHILD, 10, 60, 100, 20, hWnd, (HMENU)COM_SETCOLOR, NULL, NULL);
+	CreateWindowW(L"button", L"AddQueue", WS_VISIBLE | WS_CHILD, 110, 60, 100, 20, hWnd, (HMENU)COM_ADDQUEUE, NULL, NULL);
+	pState->hQueueBox = CreateWindowW(L"static", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | WS_HSCROLL, 10, 110, 400, 300, hWnd, NULL, NULL, NULL);
 }
 
 LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-	static HWND hColor;
+	int com = 0;
+	MainWinState *pState = reinterpret_cast<MainWinState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
 	switch (msg) {
-	case WM_CREATE:
-		addUI(hWnd, hColor);
-		break;
+	case WM_CREATE: {
+		CREATESTRUCTW *pCreat = reinterpret_cast<CREATESTRUCTW*>(lParam);
+		MainWinState *pStateC = reinterpret_cast<MainWinState*>(pCreat->lpCreateParams);
+		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pStateC);
+		pState = pStateC;
+		addUI(hWnd, pState);
+	}
+	break;
 	case WM_COMMAND:
-		switch (wParam)
-		{
-		default:
-			break;
+		switch (wParam) {
+		default: com = wParam;
 		}
 		break;
 	case WM_KEYDOWN:
-		
 		switch (wParam) {
 		case VK_RETURN:
-		{
-			wchar_t text[32];
-			if (!GetWindowTextW(hColor, text, 32)) {
-				showError("SetError", GetLastError());
-			}
-			SetWindowTextW(hWnd, text);
-		}
+			if (lParam == (LPARAM)pState->hColorE) com = COM_SETCOLOR;
 		break;
 		}
 		break;
 	case WM_DESTROY:
+		delete pState;
 		PostQuitMessage(0);
 		break;
 		return 0;
 	default:
 		return DefWindowProcW(hWnd, msg, wParam, lParam);
 	}
+
+	switch (com) {
+	case COM_SETCOLOR: {
+		wchar_t text[32];
+		GetWindowTextW(pState->hColorE, text, 32);
+		unsigned char rgba[4] = { 0, 0, 0, 0 };
+		rgba[3] = 255;
+		swscanf_s(text, L"%hhu, %hhu, %hhu", rgba, rgba + 1, rgba + 2);
+		PostMessageW(NULL, WM_SETCOLOR, *reinterpret_cast<WPARAM*>(rgba), NULL);
+	}
+	break;
+	case COM_ADDQUEUE: {
+		pState->hQueues.push_back(CreateWindowW(L"static", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL,
+			5 + 55 * pState->hQueues.size(), 5, 50, 290, pState->hQueueBox, NULL, NULL, NULL));
+	} break;
+	}
+}
+
+LRESULT CALLBACK QueueWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	int com = 0;
+	switch (msg) {
+	default: return DefWindowProcW(hWnd, msg, wParam, lParam);
+	}
+	switch (com) {}
 }

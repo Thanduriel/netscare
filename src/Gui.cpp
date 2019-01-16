@@ -19,9 +19,29 @@ static void showError(const char* caption, DWORD error) {
 	}
 }
 
+struct Icon {
+	int width, height;
+	BYTE planes, bitsPixel;
+	const BYTE *andBits, *xorBits;
+	constexpr Icon(int width, int height, BYTE planes, BYTE bitsPixel, const BYTE* andBits, const BYTE* xorBits)
+		: width{ width }, height{ height }, planes{ planes }, bitsPixel{ bitsPixel }, andBits{ andBits }, xorBits{xorBits} {}
+	HICON create(HINSTANCE hInst) const {
+		return CreateIcon(hInst, width, height, planes, bitsPixel, andBits, xorBits);
+	}
+};
+constexpr Icon icon{32, 32, 1, 1, andMask, xorMap};
+
 Gui::Gui(HINSTANCE hInst) {
+	_hCurser = LoadCursor(NULL, IDC_ARROW);
+	_hIcon = icon.create(hInst);
+	_iconMenu = CreatePopupMenu();
+	AppendMenuW(_iconMenu, MF_STRING, COM_SHOW, L"Open");
+	AppendMenuW(_iconMenu, MF_SEPARATOR, NULL, NULL);
+	AppendMenuW(_iconMenu, MF_STRING, COM_CLOSE, L"Quit");
+
 	WNDCLASSW winC = { 0 };
-	winC.hCursor = LoadCursor(NULL, IDC_ARROW);
+	winC.hCursor = _hCurser;
+	winC.hIcon = _hIcon;
 	winC.hbrBackground = (HBRUSH)COLOR_WINDOW;
 	winC.hInstance = hInst;
 	winC.lpszClassName = L"MainWindow";
@@ -32,7 +52,7 @@ Gui::Gui(HINSTANCE hInst) {
 	}
 
 	winC = {0};
-	winC.hCursor = LoadCursor(NULL, IDC_ARROW);
+	winC.hCursor = _hCurser;
 	winC.hbrBackground = (HBRUSH)COLOR_WINDOW;
 	winC.hInstance = hInst;
 	winC.lpszClassName = L"QueueBoxWin";
@@ -43,7 +63,7 @@ Gui::Gui(HINSTANCE hInst) {
 	}
 
 	winC = { 0 };
-	winC.hCursor = LoadCursor(NULL, IDC_ARROW);
+	winC.hCursor = _hCurser;
 	winC.hbrBackground = (HBRUSH)COLOR_WINDOW;
 	winC.hInstance = hInst;
 	winC.lpszClassName = L"QueueWinWin";
@@ -54,7 +74,7 @@ Gui::Gui(HINSTANCE hInst) {
 	}
 
 	winC = { 0 };
-	winC.hCursor = LoadCursor(NULL, IDC_ARROW);
+	winC.hCursor = _hCurser;
 	winC.hbrBackground = (HBRUSH)COLOR_WINDOW;
 	winC.hInstance = hInst;
 	winC.lpszClassName = L"EventWinWin";
@@ -64,10 +84,37 @@ Gui::Gui(HINSTANCE hInst) {
 		return;
 	}
 
+	winC = { 0 };
+	winC.hCursor = _hCurser;
+	winC.hbrBackground = (HBRUSH)COLOR_WINDOW;
+	winC.hInstance = hInst;
+	winC.lpszClassName = L"QueueActionWin";
+	winC.lpfnWndProc = QueueActionProc;
+	if (!RegisterClassW(&winC)) {
+		UnmapDll();
+		return;
+	}
+
 	{
 		MainWinState *pState = new (std::nothrow) MainWinState{};
-		_hInput = CreateWindowW(L"MainWindow", L"NetScare", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+		pState->nifMenu = _iconMenu;
+		_hInput = CreateWindowW(L"MainWindow", applicationName, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 			DIM_MAINWIN.x, DIM_MAINWIN.y, DIM_MAINWIN.width, DIM_MAINWIN.height, NULL, NULL, NULL, pState);
+	}
+
+	NOTIFYICONDATAW note = { 0 };
+	note.cbSize = sizeof(NOTIFYICONDATAW);
+	note.hWnd = _hInput;
+	note.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+	note.uCallbackMessage = WM_NOTIFICATIONCALLBACK;
+	note.hIcon = _hIcon;
+	note.uID = NIF_ID;
+	wcscpy(note.szTip, applicationName);
+	note.dwState = NULL;
+	note.dwStateMask = NULL;
+	note.uVersion = NOTIFYICON_VERSION_4;
+	if (!Shell_NotifyIconW(NIM_ADD, &note)) {
+		showError("Can't Craete NotifyIcon", GetLastError());
 	}
 }
 
@@ -112,8 +159,18 @@ void addUI(HWND hWnd, MainWinState* pState) {
 		hWnd, NULL, NULL, qbs);
 }
 
-void addUI(HWND hWnd, QueueWinState* pState) {
-	CreateWindowW(L"button", L"X", WS_VISIBLE | WS_CHILD, 1, 1, 10, 10, hWnd, (HMENU)COM_CLOSE, NULL, NULL);
+void addUI(HWND hWnd, QueueWinState* pState) {}
+
+void addUI(HWND hWnd, QueueActionState* pState) {
+	RECT rect;
+	GetClientRect(hWnd, &rect);
+	int w = DIM_QUEUACTION.width,
+		h = DIM_QUEUACTION.height;
+	h = (h - 8) / 3;
+	CreateWindowW(L"button", L"Add Event", WS_VISIBLE | WS_CHILD, 0, 2, w, h, hWnd, (HMENU)COM_ADDEVENT, NULL, NULL);
+	CreateWindowW(L"button", L"Delete", WS_VISIBLE | WS_CHILD, 0, 4 + h, w, h, hWnd, (HMENU)COM_CLOSE, NULL, NULL);
+	pState->hKey = CreateWindowW(L"button", L"Key", WS_VISIBLE | WS_CHILD, 0, 6 + 2 * h, w, h, hWnd, (HMENU)COM_READKEY, NULL, NULL);
+	pState->readKey = false;
 }
 
 void addUI(HWND hWnd, EventWinState* pState) {
@@ -131,13 +188,14 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 	int com = 0;
 	MainWinState *pState = reinterpret_cast<MainWinState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
 	switch (msg) {
+	case WM_SHOWWINDOW:
+		break;
 	case WM_CREATE: {
 		CREATESTRUCTW *pCreat = reinterpret_cast<CREATESTRUCTW*>(lParam);
 		pState = reinterpret_cast<MainWinState*>(pCreat->lpCreateParams);
 		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pState);
 		addUI(hWnd, pState);
-	}
-					break;
+	}	break;
 	case WM_COMMAND:
 		com = wParam;
 		break;
@@ -148,11 +206,37 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 			break;
 		}
 		break;
-	case WM_DESTROY:
+	case WM_CLOSE:
+		if (!ShowWindow(hWnd, SW_HIDE))
+			showError("Can't Hide Win", GetLastError());
+		break;
+	case WM_DESTROY: {
 		delete pState;
+		NOTIFYICONDATAA note = { 0 };
+		note.uID = NIF_ID;
+		note.hWnd = hWnd;
+		Shell_NotifyIconA(NIM_DELETE, &note);
 		PostQuitMessage(0);
 		break;
-		return 0;
+	}
+	case WM_NOTIFICATIONCALLBACK: {
+		switch (LOWORD(lParam)) {
+		case WM_CONTEXTMENU:
+		case WM_RBUTTONDOWN: {
+			POINT posC;
+			GetCursorPos(&posC);
+			if (IsWindowVisible(hWnd))
+				EnableMenuItem(pState->nifMenu, 0, MF_BYPOSITION | MF_GRAYED);
+			else
+				EnableMenuItem(pState->nifMenu, 0, MF_BYPOSITION | MF_ENABLED);
+			SetForegroundWindow(hWnd);
+			TrackPopupMenu(pState->nifMenu, TPM_LEFTBUTTON | TPM_RIGHTALIGN | TPM_BOTTOMALIGN, posC.x, posC.y, 0, hWnd, NULL);
+		}	break;
+		case NIN_KEYSELECT:
+		case NIN_SELECT:
+		case WM_LBUTTONDOWN: com = COM_SHOW; break;
+		}
+	}	break;
 	default:
 		return DefWindowProcW(hWnd, msg, wParam, lParam);
 	}
@@ -169,6 +253,11 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 	case COM_ADDQUEUE:
 		PostMessageW(pState->hQueueBox, WM_COMMAND, COM_ADDQUEUE, lParam);
 		break;
+	case COM_SHOW: 
+		if (!IsWindowVisible(hWnd))ShowWindow(hWnd, SW_SHOW);
+		SetForegroundWindow(hWnd);
+		break;
+	case COM_CLOSE: DestroyWindow(hWnd); break;
 	// default: MessageBox(NULL, std::to_string(com).c_str(), "COMANND", MB_OK);
 	}
 	return 0;
@@ -219,8 +308,8 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		RECT self;
 		GetWindowRect(hWnd, &self);
 		for (std::size_t i = 0; i < pState->hQueues.size(); ++i) {
-			if (pState->hQueues[i].hQueue == delet) {
-				DestroyWindow(pState->hQueues[i].hAddButton);
+			if (pState->hQueues[i].hActionBox == delet) {
+				DestroyWindow(pState->hQueues[i].hQueue);
 				continue;
 			}
 			if (num < i) {
@@ -231,12 +320,12 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				rect.top -= self.top + 1;
 				rect.left -= self.left + (i - num) * DIM_QUEUEWIN.boundW + 1;
 				MoveWindow(pState->hQueues[i].hQueue, rect.left, rect.top, w, h, TRUE);
-				GetWindowRect(pState->hQueues[i].hAddButton, &rect);
+				GetWindowRect(pState->hQueues[i].hActionBox, &rect);
 				w = rect.right - rect.left;
 				h = rect.bottom - rect.top;
 				rect.top -= self.top + 1;
 				rect.left -= self.left + (i - num) * DIM_QUEUEWIN.boundW + 1;
-				MoveWindow(pState->hQueues[i].hAddButton, rect.left, rect.top, w, h, TRUE);
+				MoveWindow(pState->hQueues[i].hActionBox, rect.left, rect.top, w, h, TRUE);
 				pState->hQueues[num] = pState->hQueues[i];
 			}
 			++num;
@@ -250,6 +339,9 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			pState->scroll = max;
 		}
 	} break;
+	case WM_DESTROY:
+		if(pState) delete pState;
+		break;
 	case WM_COMMAND:
 		com = wParam;
 		break;
@@ -260,7 +352,7 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch (com) {
 	case COM_ADDEVENT: {
 		for (const QueueBoxState::Queue& q : pState->hQueues) {
-			if ((LPARAM)q.hAddButton == lParam) {
+			if ((LPARAM)q.hActionBox == lParam) {
 				PostMessageW(q.hQueue, WM_COMMAND, wParam, lParam);
 				break;
 			}
@@ -270,14 +362,15 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		static int num = 0;
 		QueueWinState * state = new (std::nothrow) QueueWinState;
 		state->keyCode = num;
+		QueueActionState* actionState = new (std::nothrow) QueueActionState;
 		++num;
 		int x = DIM_QUEUEWIN.x + DIM_QUEUEWIN.boundW * pState->hQueues.size() - pState->scroll;
 		pState->hQueues.push_back(QueueBoxState::Queue(
 			CreateWindowW(L"QueueWinWin", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL,
 			x, DIM_QUEUEWIN.y, DIM_QUEUEWIN.width, DIM_QUEUEWIN.height,
 			hWnd, NULL, NULL, state),
-			CreateWindowW(L"button", L"AddEvent", WS_VISIBLE | WS_CHILD, x, 5, DIM_QUEUEWIN.width, 20, hWnd, (HMENU)COM_ADDEVENT, NULL, NULL)));
-		if (!pState->hQueues.back().hQueue || !pState->hQueues.back().hAddButton)
+			CreateWindowW(L"QueueActionWin", L"", WS_VISIBLE | WS_CHILD, x, DIM_QUEUACTION.y, DIM_QUEUACTION.width, DIM_QUEUACTION.height, hWnd, NULL, NULL, actionState)));
+		if (!pState->hQueues.back().hQueue || !pState->hQueues.back().hActionBox)
 			showError("PQueueError", GetLastError());
 		if (pState->hQueues.size() > QUEUE_WIN_PRO_BOX)
 			SetScrollRange(hWnd, SB_HORZ, 0, (pState->hQueues.size() - QUEUE_WIN_PRO_BOX) * DIM_QUEUEWIN.boundW, true);
@@ -292,7 +385,9 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	int com = 0;
 	QueueWinState* pState = reinterpret_cast<QueueWinState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
 	switch (msg) {
-	case WM_DESTROY: PostMessageW(GetParent(hWnd), WM_DESTROYCHILD, NULL, (LPARAM)hWnd); break;
+	case WM_DESTROY:
+		if (pState) delete pState;
+		break;
 	case WM_VSCROLL: {
 		WORD low = LOWORD(wParam), high = HIWORD(wParam);
 		int diff = 0;
@@ -333,15 +428,12 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	default: return DefWindowProcW(hWnd, msg, wParam, lParam);
 	}
 	switch (com) {
-	case COM_CLOSE:
-		DestroyWindow(hWnd);
-		break;
 	case COM_ADDEVENT: {
 		static int num = 0;
 		EventWinState * state = new (std::nothrow) EventWinState;
 		++num;
 		pState->hEvents.push_back(CreateWindowW(L"EventWinWin", L"", WS_VISIBLE | WS_CHILD | WS_BORDER,
-			DIM_EVENTWIN.x, 10 + DIM_EVENTWIN.y + DIM_EVENTWIN.boundH * pState->hEvents.size() - pState->scroll, DIM_EVENTWIN.width, DIM_EVENTWIN.height,
+			DIM_EVENTWIN.x, DIM_EVENTWIN.y + DIM_EVENTWIN.boundH * pState->hEvents.size() - pState->scroll, DIM_EVENTWIN.width, DIM_EVENTWIN.height,
 			hWnd, NULL, NULL, state));
 		if (!pState->hEvents.back())
 			showError("PQueueError", GetLastError());
@@ -385,6 +477,9 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		pState->target = 0;
 		addUI(hWnd, pState);
 	} break;
+	case WM_DESTROY:
+		if (pState) delete pState;
+		break;
 	case WM_COMMAND: com = wParam; break;
 	default:
 		return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -405,6 +500,45 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		}
 	}	break;
 	case COM_SETTARGET: break;
+	}
+	return 0;
+}
+
+LRESULT CALLBACK QueueActionProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	int com = 0;
+	QueueActionState *pState = reinterpret_cast<QueueActionState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+	switch (msg) {
+	case WM_KILLFOCUS:
+		pState->readKey = false;
+		SetWindowTextA(pState->hKey, ("Key: " + std::to_string(pState->keyCode)).c_str());
+		break;
+	case WM_CREATE: {
+		CREATESTRUCTW *pCraete = reinterpret_cast<CREATESTRUCTW*>(lParam);
+		pState = reinterpret_cast<QueueActionState*>(pCraete->lpCreateParams);
+		pState->keyCode = 0;
+		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pState);
+		addUI(hWnd, pState);
+	}	break;
+	case WM_KEYDOWN:
+		if (pState->readKey) {
+			pState->keyCode = wParam;
+			pState->readKey = false;
+			SetWindowTextA(pState->hKey, ("Key: " + std::to_string(pState->keyCode)).c_str());
+		}
+		break;
+	case WM_DESTROY:
+		if (pState) delete pState;
+		break;
+	case WM_COMMAND:
+		com = wParam;
+		break;
+	default: return DefWindowProcW(hWnd, msg, wParam, lParam);
+	}
+
+	switch (com) {
+	case COM_CLOSE: PostMessageW(GetParent(hWnd), WM_DESTROYCHILD, NULL, (LPARAM)hWnd); DestroyWindow(hWnd); break;
+	case COM_ADDEVENT: PostMessageW(GetParent(hWnd), msg, wParam, (LPARAM)hWnd); break;
+	case COM_READKEY: pState->readKey = true; SetWindowTextA(pState->hKey, "---"); SetFocus(hWnd); break;
 	}
 	return 0;
 }

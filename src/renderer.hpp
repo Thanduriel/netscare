@@ -3,6 +3,7 @@
 #include "texture.hpp"
 #include "PipeServer.hpp"
 
+#include <DirectXMath.h>
 #include <d3d.h>
 #include <d3d11.h>
 #include <cassert>
@@ -23,9 +24,10 @@ public:
 
 	static const DirectX::CommonStates* GetCommonStates() { return m_commonStates; }
 
-	static void SetPipeNode(PipeNode&& node) {
-		m_pipeNode = node;
-	};
+	static void SetHWND(HWND _handle) { m_windowHandle = _handle; }
+	static void SetPipeNode(const PipeNode& node) { m_pipeNode = node; };
+
+	static DirectX::XMINT2 GetBufferSize();
 private:
 	static void Draw();
 	static void InitializeParent(IDXGISwapChain* _this);
@@ -35,6 +37,8 @@ private:
 	static ID3D11DeviceContext* m_context;
 	static IDXGISwapChain* m_swapChain;
 	static ID3D11RenderTargetView* m_backbuffer;
+
+	static HWND m_windowHandle;
 	
 	static const DirectX::CommonStates* m_commonStates;
 	static const Effect* m_effect;

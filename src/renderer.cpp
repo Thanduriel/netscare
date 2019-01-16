@@ -1,4 +1,5 @@
 #include "renderer.hpp"
+#include "utils.hpp"
 #include <iostream>
 #include <windows.h>
 #include <stdio.h>
@@ -12,6 +13,8 @@ ID3D11RenderTargetView* Device::m_backbuffer = nullptr;
 const DirectX::CommonStates* Device::m_commonStates = nullptr;
 const Effect* Device::m_effect = nullptr;
 const Texture* Device::m_texture = nullptr;
+
+HWND Device::m_windowHandle = 0;
 
 DWORD_PTR* Device::m_swapChainVtable = nullptr;
 D3D11PresentHook Device::m_orgPresent = nullptr;
@@ -63,10 +66,7 @@ bool Device::Initialize()
 
 	cout << "m_swapChainVtable:		0x" << hex << m_swapChainVtable << endl;
 
-//	DWORD dwOld;
-//	VirtualProtect(nullptr, 2, PAGE_EXECUTE_READWRITE, &dwOld);
-
-	return (m_swapChainVtable);
+	return m_swapChainVtable;
 }
 
 
@@ -103,12 +103,21 @@ void Device::SetEffect(const Effect& _effect)
 	m_context->IASetInputLayout(_effect.GetInputLayout());
 
 	// Set the vertex and pixel shaders that will be used to render this triangle.
-	m_context->VSSetShader(_effect.GetVertexShader(), NULL, 0);
-	m_context->PSSetShader(_effect.GetPixelShader(), NULL, 0);
+	m_context->VSSetShader(_effect.m_vertexShader, NULL, 0);
+	m_context->PSSetShader(_effect.m_pixelShader, NULL, 0);
 
 	m_context->PSSetSamplers(0, 1, &_effect.m_sampleState);
 	float factor[4] = { 1.f,1.f,1.f,1.f };
 	m_context->OMSetBlendState(_effect.m_blendState, factor, ~0); //D3D11_COLOR_WRITE_ENABLE_ALL & ~D3D11_COLOR_WRITE_ENABLE_ALPHA
+}
+
+DirectX::XMINT2 Device::GetBufferSize()
+{
+	RECT rect;
+	if (!GetWindowRect(m_windowHandle, &rect))
+		Utils::ShowError("GetWindowRect",GetLastError());
+
+	return { rect.right - rect.left, rect.bottom - rect.top };
 }
 
 void Device::Draw()
@@ -138,15 +147,8 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 	cout << "" << endl;
 
 	m_device->Release();
-	// cout << "m_pDevice released" << endl;
-
 	m_context->Release();
-	// cout << "m_pContext released" << endl;
-
 	m_swapChain->Release();
-	// cout << "m_pSwapChain released" << endl;
-
-//	MessageBox(nullptr, "Test wupp wupp", "Caption", MB_OK);
 
 	ID3D11Texture2D *pBackBuffer;
 	_this->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
@@ -154,7 +156,6 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 	pBackBuffer->Release();
 
 	m_commonStates = new DirectX::CommonStates(m_device);
-
 	Effect* effect = new Effect(m_device,L"../shader/texture.vs",L"../shader/texture.ps");
 	m_texture = new Texture(m_device,L"../texture/bolt.dds", -0.5f, -0.5f, 0.5f, 0.5f);
 	SetEffect(*effect);

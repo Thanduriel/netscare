@@ -1,14 +1,15 @@
 #include "texture.hpp"
+#include "renderer.hpp"
 #include <d3d11shader.h>
 #include <DDSTextureLoader.h>
 #include <string>
-
 
 constexpr int VERTEX_COUNT = 4;
 
 using namespace DirectX;
 
-Texture::Texture(ID3D11Device* _d3dDevice, WCHAR* _file, float _x1, float _y1, float _x2, float _y2)
+Texture::Texture(ID3D11Device* _d3dDevice, WCHAR* _file, float _x1, float _y1, 
+	float _scaleX, float _scaleY)
 {
 	HRESULT result;
 	result = DirectX::CreateDDSTextureFromFile(_d3dDevice, _file, &m_texture, &m_textureView);
@@ -17,15 +18,25 @@ Texture::Texture(ID3D11Device* _d3dDevice, WCHAR* _file, float _x1, float _y1, f
 		MessageBox(nullptr, "failed to load texture", nullptr, MB_OK);
 	}
 
+	ID3D11Texture2D* tex = reinterpret_cast<ID3D11Texture2D*>(m_texture);
+	D3D11_TEXTURE2D_DESC desc;
+	tex->GetDesc(&desc);
+	const XMINT2 screenSize = Device::GetBufferSize();
+
+	const float rx = static_cast<float>(desc.Width) / screenSize.x * 2.f;
+	const float ry = static_cast<float>(desc.Height) / screenSize.y * 2.f;
+	const float x2 = _x1 + rx * _scaleX;
+	const float y2 = _y1 + ry * _scaleY;
+
 	// Load the vertex array with data.
 	VertexPositionTexture vertices[VERTEX_COUNT];
 	vertices[0].position = XMFLOAT3{ _x1, _y1, 0.0f };
 	vertices[0].textureCoordinate = XMFLOAT2(0.f, 1.f);
-	vertices[1].position = XMFLOAT3{_x1, _y2, 0.0f};
+	vertices[1].position = XMFLOAT3{_x1, y2, 0.0f};
 	vertices[1].textureCoordinate = XMFLOAT2(0.f, 0.f);
-	vertices[2].position = XMFLOAT3{ _x2, _y1, 0.0f };
+	vertices[2].position = XMFLOAT3{ x2, _y1, 0.0f };
 	vertices[2].textureCoordinate = XMFLOAT2(1.f, 1.f);
-	vertices[3].position = XMFLOAT3{ _x2, _y2, 0.0f };
+	vertices[3].position = XMFLOAT3{ x2, y2, 0.0f };
 	vertices[3].textureCoordinate = XMFLOAT2(1.f, 0.f);
 
 

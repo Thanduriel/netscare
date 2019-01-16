@@ -171,6 +171,7 @@ LRESULT HookProc(
 		if (!::LoadLibrary(lib_name))
 			goto END;
 
+		Device::SetHWND(g_hWnd);
 		FindSwapChain();
 	}
 	else if (pCW->message == WM_COPYDATA) {
@@ -225,8 +226,6 @@ int InjectDll(HWND hWnd, HANDLE hIn, HANDLE hOut)
 {
 	g_hWnd = hWnd;
 
-	std::cout << "Hin" << hIn << "\nhOout" << hOut << '\n';
-
 	// Hook
 	g_hHook = SetWindowsHookEx(WH_CALLWNDPROC, (HOOKPROC)HookProc,
 		hDll, GetWindowThreadProcessId(hWnd, NULL));
@@ -235,7 +234,6 @@ int InjectDll(HWND hWnd, HANDLE hIn, HANDLE hOut)
 
 	// By the time SendMessage returns, 
 	// the START button has already been subclassed
-	std::cout << "I" << (LPARAM)hIn << "\nO" << (WPARAM)hOut << "\n";
 	Pipes pips{hIn, hOut};
 	
 	mCDS.dwData = PIPES;

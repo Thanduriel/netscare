@@ -15,6 +15,7 @@ constexpr int COM_SETFILE = 5;
 constexpr int COM_SETTARGET = 6;
 constexpr int COM_SHOW = 7;
 constexpr int COM_READKEY = 8;
+constexpr int COM_EXECUTE_EVENT = 9;
 
 struct Dim {
 	constexpr Dim(int x, int y, int width, int height) : x{ x }, y{ y }, width{ width }, height{ height }, boundW{ x + width }, boundH{y + height} {}

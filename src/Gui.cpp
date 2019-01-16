@@ -352,12 +352,20 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch (com) {
 	case COM_ADDEVENT: {
 		for (const QueueBoxState::Queue& q : pState->hQueues) {
-			if ((LPARAM)q.hActionBox == lParam) {
+			if (q.hActionBox == (HWND)lParam) {
 				PostMessageW(q.hQueue, WM_COMMAND, wParam, lParam);
 				break;
 			}
 		}
 	} break;
+	case COM_EXECUTE_EVENT: {
+		for (const QueueBoxState::Queue& q : pState->hQueues) {
+			if (q.hActionBox == (HWND)lParam) {
+				PostMessageW(q.hQueue, WM_COMMAND, wParam, lParam);
+				break;
+			}
+		}
+	}	break;
 	case COM_ADDQUEUE: {
 		static int num = 0;
 		QueueWinState * state = new (std::nothrow) QueueWinState;
@@ -440,6 +448,11 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		if (pState->hEvents.size() > QUEUE_WIN_PRO_BOX)
 			SetScrollRange(hWnd, SB_VERT, 0, (pState->hEvents.size() - QUEUE_EVENT_PRO_WIN) * DIM_EVENTWIN.boundH, true);
 	}	break;
+	case COM_EXECUTE_EVENT: {
+		HWND hEvent = (pState->hEvents[0]);
+		EventWinState *eState = reinterpret_cast<EventWinState*>(GetWindowLongPtrW(hEvent, GWLP_USERDATA));
+		MessageBox(NULL, eState->file, "EVENT", MB_OK | MB_APPLMODAL);
+	}  break;
 	// default: MessageBox(NULL, std::to_string(com).c_str(), "COMANND", MB_OK);
 	}
 	return 0;
@@ -519,11 +532,18 @@ LRESULT CALLBACK QueueActionProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pState);
 		addUI(hWnd, pState);
 	}	break;
+	case WM_HOTKEY:
+			PostMessage(GetParent(hWnd), WM_COMMAND, COM_EXECUTE_EVENT, (LPARAM)hWnd);
+		break;
 	case WM_KEYDOWN:
 		if (pState->readKey) {
-			pState->keyCode = wParam;
+			if (pState->keyCode != wParam) {
+				if (pState->keyCode) { if (!UnregisterHotKey(hWnd, 1)) showError("UnRegsiterHotKey", GetLastError()); }
+				pState->keyCode = wParam;
+				if (pState->keyCode) { if (!RegisterHotKey(hWnd, 1, 0, wParam)) showError("RegisterHotKey" ,GetLastError()); }
+				SetWindowTextA(pState->hKey, ("Key: " + std::to_string(pState->keyCode)).c_str());
+			}
 			pState->readKey = false;
-			SetWindowTextA(pState->hKey, ("Key: " + std::to_string(pState->keyCode)).c_str());
 		}
 		break;
 	case WM_DESTROY:

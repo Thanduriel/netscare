@@ -2,10 +2,20 @@
 
 #include "../src/interface.hpp"
 #include "../src/PipeServer.hpp"
+
+struct Address {
+	std::wstring name;
+	int userId;
+	int tickets;
+	Address() : name{ L"" }, userId{ -1 }, tickets{ 0 } {}
+	Address(std::wstring&& name, int userId, int tickets) : name{ name }, userId{ userId }, tickets{ tickets } {}
+};
+
 constexpr int WM_SETCOLOR = WM_USER + 1; // wParam = rgba8
 constexpr int WM_DESTROYCHILD = WM_USER + 2; // child has been detsroyd, lParam = ChlidHandle
 constexpr int WM_NOTIFICATIONCALLBACK = WM_USER + 3;
-constexpr int WM_REDIRECTED_KEYDOWN = WM_USER + 4;
+constexpr int WM_SETUPEVENT = WM_USER + 4; // wParam int user_id, lParam char* filename
+constexpr int WM_TRIGGEREVENT = WM_USER + 5; // wParam int user_id
 
 constexpr int COM_SETCOLOR = 1;
 constexpr int COM_ADDQUEUE = 2;
@@ -16,23 +26,28 @@ constexpr int COM_SETTARGET = 6;
 constexpr int COM_SHOW = 7;
 constexpr int COM_READKEY = 8;
 constexpr int COM_EXECUTE_EVENT = 9;
+constexpr int COM_SELECTITEM = 10; // lParam = item id;
 
 struct Dim {
 	constexpr Dim(int x, int y, int width, int height) : x{ x }, y{ y }, width{ width }, height{ height }, boundW{ x + width }, boundH{y + height} {}
 	const int x, y, width, height, boundW, boundH;
 };
 
+constexpr Dim DIM_ADDRESSLINE{ 10, 5, 300, 50 };
+constexpr Dim DIM_ADDRESSBOOK{ 200, 200, DIM_ADDRESSLINE.width + 50, 400 };
+
 constexpr Dim DIM_MAINWIN{ 100, 100, 500, 500 };
 constexpr Dim DIM_QUEUEBOX{ 10, 110, 450, 300 };
-constexpr Dim DIM_QUEUEWIN{ 5, 80, 80, DIM_QUEUEBOX.height - 82};
+constexpr Dim DIM_QUEUEWIN{ 5, 80, 80, DIM_QUEUEBOX.height - 100};
 constexpr Dim DIM_QUEUACTION{ 0, 2, DIM_QUEUEWIN.width, DIM_QUEUEWIN.y - 4 };
 constexpr int QUEUE_WIN_PRO_BOX = DIM_QUEUEBOX.width / DIM_QUEUEWIN.boundW;
 
-constexpr Dim DIM_EVENTWIN{ 2, 5, DIM_QUEUEWIN.width - 24, 30 };
+constexpr Dim DIM_EVENTWIN{ 2, 5, DIM_QUEUEWIN.width - 24, 50 };
 constexpr int QUEUE_EVENT_PRO_WIN = DIM_QUEUEWIN.height / DIM_EVENTWIN.boundH;
 
 constexpr int NIF_ID = 1;
 
+LRESULT CALLBACK AddressBookProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK MainWinProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK QueueBoxProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK QueueWinProc(HWND, UINT, WPARAM, LPARAM);
@@ -41,9 +56,21 @@ LRESULT CALLBACK EventWinPro(HWND, UINT, WPARAM, LPARAM);
 
 bool getOpenFileName(char* fileName, int size, const char* = NULL);
 
+struct AddressBookState {
+	AddressBookState(std::vector<Address>& adr, std::vector<int>& res) : addresses{ adr }, reservt{ res } {}
+	std::vector<Address>& addresses;
+	std::vector<int>& reservt;
+	int scroll;
+	int linePerBook;
+	HWND parent;
+};
+
 struct MainWinState {
 	HWND hColorE{ 0 }, hQueueBox{ 0 };
 	HMENU nifMenu;
+	MainWinState(std::vector<Address>& adrs, std::vector<int>& res) : addresses{ adrs }, reservt{ res } {}
+	std::vector<Address>& addresses;
+	std::vector<int>& reservt;
 };
 
 struct QueueBoxState {
@@ -72,6 +99,8 @@ struct QueueWinState {
 struct EventWinState {
 	char* file{ nullptr };
 	int target{ 0 };
+	bool readTarget;
+	MainWinState* mainState;
 };
 
 struct Action {
@@ -91,8 +120,10 @@ class Gui {
 	HCURSOR _hCurser;
 	HICON _hIcon;
 	HMENU _iconMenu;
+	std::vector<Address>& addresses;
+	std::vector<int> reservt; // tickets on hold
 public:
-	Gui(HINSTANCE);
+	Gui(HINSTANCE, std::vector<Address>&);
 	~Gui() {
 		DestroyIcon(_hIcon);
 		DestroyCursor(_hCurser);

@@ -96,16 +96,19 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		std::cout << "readdaMsg:\n" << ms << " - length - " << rT.rededBytes() << '\n';
 	}
 
-	Gui gui(hInst);
-
 	struct TaskQueue {
 		Action::TYPE type;
 		Task<unsigned char*>& task;
 		TaskQueue(const Action& action, Task<unsigned char*>& task) : type{ action.type }, task{ task } {}
 	};
-
+	std::vector<Address> addresses;
+	addresses.push_back(Address(L"Jörgen", 1, 1));
+	addresses.push_back(Address(L"YOLO", 2, 8));
+	addresses.push_back(Address(L"HanHan", 23, 1));
 	std::vector<TaskQueue> actions;
 	unsigned char _msg[] = {255, 255, 0, 255};
+
+	Gui gui(hInst, addresses);
 
 	bool run = true;
 	while (run) {

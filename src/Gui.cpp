@@ -31,7 +31,9 @@ struct Icon {
 };
 constexpr Icon icon{32, 32, 1, 1, andMask, xorMap};
 
-Gui::Gui(HINSTANCE hInst) {
+Gui::Gui(HINSTANCE hInst, std::vector<Address>& addresses) : addresses{addresses} {
+	reservt.resize(addresses.size());
+	memset(reservt.data(), 0, reservt.size() * sizeof(int));
 	_hCurser = LoadCursor(NULL, IDC_ARROW);
 	_hIcon = icon.create(hInst);
 	_iconMenu = CreatePopupMenu();
@@ -46,6 +48,18 @@ Gui::Gui(HINSTANCE hInst) {
 	winC.hInstance = hInst;
 	winC.lpszClassName = L"MainWindow";
 	winC.lpfnWndProc = MainWinProc;
+	if (!RegisterClassW(&winC)) {
+		UnmapDll();
+		return;
+	}
+
+	winC = { 0 };
+	winC.hCursor = _hCurser;
+	winC.hIcon = _hIcon;
+	winC.hbrBackground = (HBRUSH)COLOR_WINDOW;
+	winC.hInstance = hInst;
+	winC.lpszClassName = L"AddressBookWin";
+	winC.lpfnWndProc = AddressBookProc;
 	if (!RegisterClassW(&winC)) {
 		UnmapDll();
 		return;
@@ -96,7 +110,7 @@ Gui::Gui(HINSTANCE hInst) {
 	}
 
 	{
-		MainWinState *pState = new (std::nothrow) MainWinState{};
+		MainWinState *pState = new (std::nothrow) MainWinState{addresses, reservt};
 		pState->nifMenu = _iconMenu;
 		_hInput = CreateWindowW(L"MainWindow", applicationName, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 			DIM_MAINWIN.x, DIM_MAINWIN.y, DIM_MAINWIN.width, DIM_MAINWIN.height, NULL, NULL, NULL, pState);
@@ -147,6 +161,30 @@ const Action Gui::update() {
 	}
 }
 
+void addUI(HWND hWnd, AddressBookState *pState) {
+	int h = 0;
+	int num = 1;
+	for (std::size_t i = 0; i < pState->addresses.size(); ++i) {
+		Address adr = pState->addresses[i];
+		CreateWindowW(L"button", (adr.name + L": Tickets " + std::to_wstring(adr.tickets) + L" (" + std::to_wstring(pState->reservt[i]) + L")").c_str(), 
+			WS_CHILD | WS_BORDER |WS_VISIBLE | ( adr.tickets - pState->reservt[i] > 0 ? 0 : WS_DISABLED),
+			DIM_ADDRESSLINE.x, DIM_ADDRESSLINE.y + h, DIM_ADDRESSLINE.width, DIM_ADDRESSLINE.height, hWnd, (HMENU)num, NULL, NULL);
+		h += DIM_ADDRESSLINE.boundH;
+		++num;
+	}
+	CreateWindowA("button", "Self",
+		WS_CHILD | WS_BORDER | WS_VISIBLE,
+		DIM_ADDRESSLINE.x, DIM_ADDRESSLINE.y + h, DIM_ADDRESSLINE.width, DIM_ADDRESSLINE.height, hWnd, (HMENU)num, NULL, NULL);
+	h += DIM_ADDRESSLINE.boundH;
+	RECT rect;
+	GetClientRect(hWnd, &rect);
+	int wH = rect.bottom - rect.top;
+	pState->linePerBook = DIM_ADDRESSLINE.boundH / wH;
+	int max = h - wH;
+	if (max < 0) max = 0;
+	SetScrollRange(hWnd, SB_VERT, 0,max, true);
+}
+
 void addUI(HWND hWnd, MainWinState* pState) {
 	CreateWindowW(L"static", L"Color(r,g,b): ", WS_VISIBLE | WS_CHILD, 10, 10, 100, 20, hWnd, NULL, NULL, NULL);
 	pState->hColorE = CreateWindowW(L"edit", L"255,255,255", WS_VISIBLE | WS_CHILD, 110, 10, 100, 20, hWnd, NULL, NULL, NULL);
@@ -179,9 +217,10 @@ void addUI(HWND hWnd, EventWinState* pState) {
 	int w = rect.right - rect.left,
 		h = rect.bottom - rect.top;
 	w = (w - 6) / 2;
-	h = h / 2;
-	CreateWindowW(L"button", L"F", WS_VISIBLE | WS_CHILD, 2, h/2, w, h, hWnd, (HMENU)COM_SETFILE, NULL, NULL);
-	CreateWindowW(L"button", L"T", WS_VISIBLE | WS_CHILD, 4 + w, h/2, w , h, hWnd, (HMENU)COM_SETTARGET, NULL, NULL);
+	h = (h -6) / 2;
+	CreateWindowW(L"button", L"X", WS_VISIBLE | WS_CHILD, 2, 2, w, h, hWnd, (HMENU)COM_CLOSE, NULL, NULL);
+	CreateWindowW(L"button", L"F", WS_VISIBLE | WS_CHILD, 2, h + 2, w, h, hWnd, (HMENU)COM_SETFILE, NULL, NULL);
+	CreateWindowW(L"button", L"T", WS_VISIBLE | WS_CHILD, 4 + w, h + 2, w , h, hWnd, (HMENU)COM_SETTARGET, NULL, NULL);
 }
 
 LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -396,6 +435,34 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_DESTROY:
 		if (pState) delete pState;
 		break;
+	case WM_DESTROYCHILD: {
+		std::size_t num = 0;
+		HWND delet = (HWND)lParam;
+		RECT self;
+		GetWindowRect(hWnd, &self);
+		for (std::size_t i = 0; i < pState->hEvents.size(); ++i) {
+			if (pState->hEvents[i] == delet) continue;
+			if (num < i) {
+				RECT rect;
+				GetWindowRect(pState->hEvents[i], &rect);
+				int w = rect.right - rect.left,
+					h = rect.bottom - rect.top,
+					x = rect.left - self.left - 1,
+					y = rect.top - self.top - 1 - (i - num) * DIM_EVENTWIN.boundH;
+				MoveWindow(pState->hEvents[i], x, y, w, h, TRUE);
+				pState->hEvents[num] = pState->hEvents[i];
+			}
+			++num;
+		}
+		pState->hEvents.resize(num);
+		int max = (num - QUEUE_EVENT_PRO_WIN) * DIM_EVENTWIN.boundH;
+		if (max < 0) max = 0;
+		SetScrollRange(hWnd, SB_VERT, 0, max, TRUE);
+		if (pState->scroll > max) {
+			ScrollWindow(hWnd, 0, pState->scroll - max, NULL, NULL);
+			pState->scroll = max;
+		}
+	}	break;
 	case WM_VSCROLL: {
 		WORD low = LOWORD(wParam), high = HIWORD(wParam);
 		int diff = 0;
@@ -408,11 +475,11 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		case SB_RIGHT: diff = pState->hEvents.size() * DIM_EVENTWIN.boundH; break;
 		case SB_LINELEFT: diff = -DIM_EVENTWIN.boundH; break;
 		case SB_LINERIGHT: diff = DIM_EVENTWIN.boundH; break;
-		case SB_PAGELEFT: diff = QUEUE_EVENT_PRO_WIN * DIM_EVENTWIN.boundH; break;
+		case SB_PAGELEFT: diff = -QUEUE_EVENT_PRO_WIN * DIM_EVENTWIN.boundH; break;
 		case SB_PAGERIGHT: diff = QUEUE_EVENT_PRO_WIN * DIM_EVENTWIN.boundH; break;
 		}
 		if (diff != 0) {
-			int maxD = (pState->hEvents.size() - QUEUE_EVENT_PRO_WIN) * DIM_EVENTWIN.boundW - pState->scroll,
+			int maxD = (pState->hEvents.size() - QUEUE_EVENT_PRO_WIN) * DIM_EVENTWIN.boundH - pState->scroll,
 				minD = -pState->scroll;
 			if (diff > maxD) diff = maxD;
 			if (diff < minD) diff = minD;
@@ -445,10 +512,11 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			hWnd, NULL, NULL, state));
 		if (!pState->hEvents.back())
 			showError("PQueueError", GetLastError());
-		if (pState->hEvents.size() > QUEUE_WIN_PRO_BOX)
+		if (pState->hEvents.size() > QUEUE_EVENT_PRO_WIN)
 			SetScrollRange(hWnd, SB_VERT, 0, (pState->hEvents.size() - QUEUE_EVENT_PRO_WIN) * DIM_EVENTWIN.boundH, true);
 	}	break;
 	case COM_EXECUTE_EVENT: {
+		if (pState->hEvents.size() == 0) break;
 		HWND hEvent = (pState->hEvents[0]);
 		EventWinState *eState = reinterpret_cast<EventWinState*>(GetWindowLongPtrW(hEvent, GWLP_USERDATA));
 		MessageBox(NULL, eState->file, "EVENT", MB_OK | MB_APPLMODAL);
@@ -487,7 +555,9 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		pState = reinterpret_cast<EventWinState*>(pCreate->lpCreateParams);
 		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pState);
 		pState->file = nullptr;
-		pState->target = 0;
+		pState->target = -1;
+		pState->readTarget = false;
+		pState->mainState = nullptr;
 		addUI(hWnd, pState);
 	} break;
 	case WM_DESTROY:
@@ -498,6 +568,14 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		return DefWindowProcW(hWnd, msg, wParam, lParam);
 	}
 	switch (com) {
+	case COM_SELECTITEM:
+		if (pState->readTarget) {
+			pState->readTarget = false;
+			if (pState->target >= 0) pState->mainState->reservt[pState->target] -= 1;
+			pState->target = lParam;
+			pState->mainState->reservt[pState->target] += 1;
+		}
+		break;
 	case COM_SETFILE: {
 		char name[512];
 		memset(name, 0, 512);
@@ -512,7 +590,22 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 			memcpy(pState->file, name, c - name);
 		}
 	}	break;
-	case COM_SETTARGET: break;
+	case COM_SETTARGET: {
+		pState->readTarget = true;
+		if (!pState->mainState) {
+			HWND main = hWnd, n;
+			while (n = GetParent(main)) main = n;
+			pState->mainState = reinterpret_cast<MainWinState*>(GetWindowLongPtrW(main, GWLP_USERDATA));
+		}
+		AddressBookState* state = new (std::nothrow) AddressBookState{pState->mainState->addresses, pState->mainState->reservt};
+		CreateWindowW(L"AddressBookWin", L"Your Tickets", WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_VSCROLL,
+			DIM_ADDRESSBOOK.x, DIM_ADDRESSBOOK.y, DIM_ADDRESSBOOK.width, DIM_ADDRESSBOOK.height,
+			hWnd, NULL, NULL, state);
+	}break;
+	case COM_CLOSE: 
+		PostMessageW(GetParent(hWnd), WM_DESTROYCHILD, NULL, (LPARAM)hWnd);
+		DestroyWindow(hWnd);
+		break;
 	}
 	return 0;
 }
@@ -559,6 +652,57 @@ LRESULT CALLBACK QueueActionProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	case COM_CLOSE: PostMessageW(GetParent(hWnd), WM_DESTROYCHILD, NULL, (LPARAM)hWnd); DestroyWindow(hWnd); break;
 	case COM_ADDEVENT: PostMessageW(GetParent(hWnd), msg, wParam, (LPARAM)hWnd); break;
 	case COM_READKEY: pState->readKey = true; SetWindowTextA(pState->hKey, "---"); SetFocus(hWnd); break;
+	}
+	return 0;
+}
+
+LRESULT CALLBACK AddressBookProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	AddressBookState* pState = reinterpret_cast<AddressBookState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
+	switch (msg) {
+	case WM_CREATE: {
+		CREATESTRUCTW *pCreate = reinterpret_cast<CREATESTRUCTW*>(lParam);
+		pState = reinterpret_cast<AddressBookState*>(pCreate->lpCreateParams);
+		pState->scroll = 0;
+		pState->parent = pCreate->hwndParent;
+		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pState);
+		addUI(hWnd, pState);
+	} break;
+	case WM_DESTROY: {
+		if (pState) delete pState;
+	} break;
+	case WM_COMMAND: {
+		if (!PostMessageW(pState->parent, WM_COMMAND, COM_SELECTITEM, wParam - 1))
+			showError("PostMes", GetLastError());
+		DestroyWindow(hWnd);
+	} break;
+	case WM_VSCROLL: {
+		WORD low = LOWORD(wParam), high = HIWORD(wParam);
+		int diff = 0;
+		bool redraw = true;
+		switch (low)
+		{
+		case SB_THUMBTRACK: diff = high - pState->scroll; redraw = false; break;
+		case SB_THUMBPOSITION: diff = high - pState->scroll; break;
+		case SB_LEFT: diff = -pState->scroll; break;
+		case SB_RIGHT: diff = pState->addresses.size() * DIM_ADDRESSLINE.boundH; break;
+		case SB_LINELEFT: diff = -DIM_ADDRESSLINE.boundH; break;
+		case SB_LINERIGHT: diff = DIM_ADDRESSLINE.boundH; break;
+		case SB_PAGELEFT: diff = -pState->linePerBook * DIM_ADDRESSLINE.boundH; break;
+		case SB_PAGERIGHT: diff = pState->linePerBook * DIM_ADDRESSLINE.boundH; break;
+		}
+		if (diff != 0) {
+			int maxD = (pState->addresses.size() - pState->linePerBook) * DIM_ADDRESSLINE.boundH - pState->scroll,
+				minD = -pState->scroll;
+			if (diff > maxD) diff = maxD;
+			if (diff < minD) diff = minD;
+			if (diff != 0) {
+				pState->scroll += diff;
+				SetScrollPos(hWnd, SB_VERT, pState->scroll, redraw);
+				ScrollWindow(hWnd, 0, -diff, NULL, NULL);
+			}
+		}
+	} break;
+	default: return DefWindowProcW(hWnd, msg, wParam, lParam);
 	}
 	return 0;
 }

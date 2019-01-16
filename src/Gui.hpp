@@ -16,7 +16,7 @@ struct Dim {
 
 constexpr Dim DIM_QUEUEBOX{ 10, 110, 450, 300 };
 constexpr Dim DIM_QUEUEWIN{ 5, 5, 50, DIM_QUEUEBOX.height - 10};
-constexpr int QUEUE_WIN_PRO_BOX = DIM_QUEUEBOX.width / (DIM_QUEUEWIN.width + DIM_QUEUEBOX.x);
+constexpr int QUEUE_WIN_PRO_BOX = DIM_QUEUEBOX.width / (DIM_QUEUEWIN.boundW);
 
 LRESULT CALLBACK MainWinProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK QueueBoxProc(HWND, UINT, WPARAM, LPARAM);

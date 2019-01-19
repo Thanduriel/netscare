@@ -19,6 +19,7 @@ constexpr int WM_NOTIFICATIONCALLBACK = WM_USER + 3;
 constexpr int WM_SETUPEVENT = WM_USER + 4; // lParam *ScareEvent
 constexpr int WM_UPDATEVENT = WM_USER + 5; // wParam int eventId
 constexpr int WM_TRIGGEREVENT = WM_USER + 6; // wParam int event_id
+constexpr int WM_REFRESH = WM_USER + 7;
 
 constexpr int COM_SETCOLOR = 1;
 constexpr int COM_ADDQUEUE = 2;
@@ -106,7 +107,18 @@ class ScareEvent {
 	ScareEventCp * cp;
 	void(ScareEventCp::*cl)();
 	bool hasCp;
+	HWND handle{ NULL };
 public:
+	enum STATE { NOT, WILLSET, SETTET, EXECUTED } evState{ NOT };
+	void setHandle(HWND hwnd) {
+		handle = hwnd;
+	}
+	void changeState(STATE state) {
+		if (state != evState) {
+			evState = state;
+			if (handle) PostMessageW(handle, WM_REFRESH, NULL, NULL);
+		}
+	}
 	bool hasNoCopy() { return !hasCp; }
 	void unRef() {
 		if (hasCp) cp = nullptr;
@@ -125,22 +137,26 @@ public:
 	ScareEvent& operator=(const ScareEvent&&) = delete;
 	~ScareEvent() {
 		if (hasCp && cp) (cp->*cl)();
+		if (file) delete[] file;
 	}
 	const std::size_t id;
 	char *file{ nullptr };
 	int target{ -1 };
-	enum STATE { NOT, WILLSET, SETTET } evState{ NOT };
 };
 
 class ScareEventCp {
 	bool valid;
 	ScareEvent* ch;
 public:
-	ScareEvent::STATE& evState;
-	const std::size_t & id;
+	const ScareEvent::STATE& evState;
+	const std::size_t id;
 	char* const& file;
 	const int & target;
+	void changeState(ScareEvent::STATE state) {
+		if(valid) ch->changeState(state);
+	}
 	void close() { 
+		if (valid) ch->unRef();
 		valid = false;
 	}
 	bool isValid() { return valid; }
@@ -148,7 +164,7 @@ public:
 		valid = se->setCopy(this, &ScareEventCp::close);
 	}
 	~ScareEventCp() {
-		if(valid)ch->unRef();
+		if(valid) ch->unRef();
 	}
 };
 

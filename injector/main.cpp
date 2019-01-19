@@ -118,9 +118,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 
 	bool run = true;
 	while (run) {
-		if (events.size() > 5) {
-			pos = 1;
-		}
 		if (pos < actions.size()) {
 			Task<unsigned char*>::STATUS_CODE sc = actions[pos].task.getState();
 			if (sc == Task<unsigned char*>::SUCCESS) {
@@ -138,7 +135,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 				(std::to_string(scareEv->target) + "  " + scareEv->file).c_str(),
 				"SetUpEvent", MB_OK); */
 			events.emplace_back( scareEv );
-			events.back().evState = ScareEvent::SETTET;
+			events.back().changeState(ScareEvent::SETTET);
 			// check if data already exiist 
 			// check if user has data or is already pending
 			// delete action.data; ?? dont work
@@ -153,9 +150,12 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 			// same as SetUp but withput set referens
 			break;
 		case Action::EV_TRIGGER: {
-			int target = *reinterpret_cast<int*>(action.data);
+			int id = *reinterpret_cast<int*>(action.data);
 			for (auto itr = events.begin(); itr != events.end(); ++itr) {
-				if (itr->target == target && itr->isValid()) {
+				if (itr->id == id && itr->isValid()) {
+					itr->changeState(ScareEvent::EXECUTED);
+					addresses[id].tickets -= 1;
+					itr->close();
 					MessageBox(NULL, (std::to_string(itr->target) + "  " + itr->file).c_str(), "Action", MB_OK);
 					break;
 				}

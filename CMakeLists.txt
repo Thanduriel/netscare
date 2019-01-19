@@ -28,7 +28,7 @@ add_library(netscare SHARED ${SOURCE_FILES})
 target_link_libraries(netscare d3d11)
 target_link_libraries(netscare directXTK)
 
-add_executable(injector injector/main.cpp src/PipeServer.cpp injector/Gui.cpp)
+add_executable(injector injector/main.cpp src/PipeServer.hpp src/PipeServer.cpp injector/Gui.cpp injector/Gui.hpp src/utils.cpp src/utils.hpp)
 target_link_libraries(injector netscare)
 set_property(TARGET injector PROPERTY WIN32_EXECUTABLE true)
 

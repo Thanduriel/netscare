@@ -1,25 +1,8 @@
 #include "Gui.hpp"
 
-std::size_t ScareEvent::num = 0;
+#include "../src/utils.hpp"
 
-static void showError(const char* caption, DWORD error) {
-	LPSTR msg = 0;
-	if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-		NULL,
-		error,
-		0,
-		(LPSTR)&msg, // muss anscheinend so, steht in der Doku
-		0,
-		NULL) == 0) {
-		MessageBox(NULL, "Cant parse Error", caption, MB_OK | MB_ICONERROR);
-		return;
-	}
-	MessageBox(NULL, msg, caption, MB_OK | MB_ICONERROR);
-	if (msg) {
-		LocalFree(msg);
-		msg = 0;
-	}
-}
+std::size_t ScareEvent::num = 0;
 
 struct Icon {
 	int width, height;
@@ -131,7 +114,7 @@ Gui::Gui(HINSTANCE hInst, std::vector<Address>& addresses) : addresses{addresses
 	note.dwStateMask = NULL;
 	note.uVersion = NOTIFYICON_VERSION_4;
 	if (!Shell_NotifyIconW(NIM_ADD, &note)) {
-		showError("Can't Craete NotifyIcon", GetLastError());
+		Utils::ShowError("Can't Craete NotifyIcon", GetLastError());
 	}
 }
 
@@ -266,7 +249,7 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		break;
 	case WM_CLOSE:
 		if (!ShowWindow(hWnd, SW_HIDE))
-			showError("Can't Hide Win", GetLastError());
+			Utils::ShowError("Can't Hide Win", GetLastError());
 		break;
 	case WM_DESTROY: {
 		delete pState;
@@ -417,12 +400,15 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 	} break;
 	case COM_EXECUTE_EVENT: {
+		bool hit = false;
 		for (const QueueBoxState::Queue& q : pState->hQueues) {
 			if (q.hActionBox == (HWND)lParam) {
+				hit = true;
 				PostMessageW(q.hQueue, WM_COMMAND, wParam, lParam);
 				break;
 			}
 		}
+		if (!hit) MessageBox(NULL, "Dont found", "Cant trigger Event", MB_OK | MB_ICONERROR);
 	}	break;
 	case COM_ADDQUEUE: {
 		static int num = 0;
@@ -437,7 +423,7 @@ LRESULT CALLBACK QueueBoxProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			hWnd, NULL, NULL, state),
 			CreateWindowW(L"QueueActionWin", L"", WS_VISIBLE | WS_CHILD, x, DIM_QUEUACTION.y, DIM_QUEUACTION.width, DIM_QUEUACTION.height, hWnd, NULL, NULL, actionState)));
 		if (!pState->hQueues.back().hQueue || !pState->hQueues.back().hActionBox)
-			showError("PQueueError", GetLastError());
+			Utils::ShowError("PQueueError", GetLastError());
 		if (pState->hQueues.size() > QUEUE_WIN_PRO_BOX)
 			SetScrollRange(hWnd, SB_HORZ, 0, (pState->hQueues.size() - QUEUE_WIN_PRO_BOX) * DIM_QUEUEWIN.boundW, true);
 	}	break;
@@ -530,16 +516,19 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			DIM_EVENTWIN.x, DIM_EVENTWIN.y + DIM_EVENTWIN.boundH * pState->hEvents.size() - pState->scroll, DIM_EVENTWIN.width, DIM_EVENTWIN.height,
 			hWnd, NULL, NULL, state));
 		if (!pState->hEvents.back())
-			showError("PQueueError", GetLastError());
+			Utils::ShowError("PQueueError", GetLastError());
 		if (pState->hEvents.size() > QUEUE_EVENT_PRO_WIN)
 			SetScrollRange(hWnd, SB_VERT, 0, (pState->hEvents.size() - QUEUE_EVENT_PRO_WIN) * DIM_EVENTWIN.boundH, true);
 	}	break;
 	case COM_EXECUTE_EVENT: {
-		if (pState->hEvents.size() == 0) break;
+		if (pState->hEvents.size() == 0) {
+			MessageBox(NULL, "No events in this queu", "cant trigger Event", MB_OK |MB_ICONERROR);
+			break;
+		}
 		HWND hEvent = (pState->hEvents[0]);
 		EventWinState *eState = reinterpret_cast<EventWinState*>(GetWindowLongPtrW(hEvent, GWLP_USERDATA));
 		if (eState->evState == ScareEvent::SETTET) {
-			PostMessageA(NULL, WM_TRIGGEREVENT, eState->id, NULL);
+			PostMessageA(NULL, WM_TRIGGEREVENT, eState->id, (LPARAM)hWnd);
 		} else {
 			MessageBox(NULL, "Filed is still loading", "Cant Trigger Event Now", MB_OK | MB_ICONERROR);
 		}
@@ -576,7 +565,7 @@ void triggerSetupWhenComplete(HWND hWnd, EventWinState *pState) {
 			SetWindowTextW(pState->hState, L"L");
 			pState->evState = ScareEvent::WILLSET;
 		} else {
-			PostMessageW(NULL, WM_UPDATEVENT, pState->id, NULL);
+			PostMessageW(NULL, WM_UPDATEVENT, pState->id, (LPARAM)hWnd);
 			SetWindowTextW(pState->hState, L"L");
 			pState->evState = ScareEvent::WILLSET;
 		}
@@ -600,22 +589,23 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		pState->evState = ScareEvent::NOT;
 		pState->readTarget = false;
 		pState->mainState = nullptr;
+		pState->setHandle(hWnd);
 		addUI(hWnd, pState);
 	} break;
-	case WM_PAINT:
-		if (pState->evState == ScareEvent::WILLSET) {
-			pState->evState = ScareEvent::SETTET;
-			SetWindowTextW(pState->hState, L"R");
-		}
-		return DefWindowProcW(hWnd, msg, wParam, lParam);
-		break;
 	case WM_DESTROY:
 		if (pState) { 
+			if (pState->target >= 0) {
+				pState->mainState->reservt[pState->target] -= 1;
+			}
 			SetWindowLongPtrW(hWnd, GWLP_USERDATA, NULL);
 			delete pState;
 		};
 		break;
 	case WM_COMMAND: com = wParam; break;
+	case WM_REFRESH: 
+		if (pState->evState == ScareEvent::SETTET) SetWindowTextW(pState->hState, L"R");
+		else if (pState->evState == ScareEvent::EXECUTED) PostMessage(hWnd, WM_COMMAND, COM_CLOSE, NULL);
+	break;
 	default:
 		return DefWindowProcW(hWnd, msg, wParam, lParam);
 	}
@@ -636,7 +626,7 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		char name[512];
 		memset(name, 0, 512);
 		if (!getOpenFileName(name, 512, pState->file)) {
-			showError("Can't get File", GetLastError());
+			Utils::ShowError("Can't get File", GetLastError());
 		} else {
 			if (pState->file) {
 				if (strcmp(name, pState->file) == 0) break; // no changes
@@ -692,9 +682,9 @@ LRESULT CALLBACK QueueActionProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	case WM_KEYDOWN:
 		if (pState->readKey) {
 			if (pState->keyCode != wParam) {
-				if (pState->keyCode) { if (!UnregisterHotKey(hWnd, 1)) showError("UnRegsiterHotKey", GetLastError()); }
+				if (pState->keyCode) { if (!UnregisterHotKey(hWnd, 1)) Utils::ShowError("UnRegsiterHotKey", GetLastError()); }
 				pState->keyCode = wParam;
-				if (pState->keyCode) { if (!RegisterHotKey(hWnd, 1, 0, wParam)) showError("RegisterHotKey" ,GetLastError()); }
+				if (pState->keyCode) { if (!RegisterHotKey(hWnd, 1, 0, wParam)) Utils::ShowError("RegisterHotKey" ,GetLastError()); }
 				SetWindowTextA(pState->hKey, ("Key: " + std::to_string(pState->keyCode)).c_str());
 			}
 			pState->readKey = false;
@@ -737,7 +727,7 @@ LRESULT CALLBACK AddressBookProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 	} break;
 	case WM_COMMAND: {
 		if (!PostMessageW(pState->parent, WM_COMMAND, COM_SELECTITEM, wParam - 1))
-			showError("PostMes", GetLastError());
+			Utils::ShowError("PostMes", GetLastError());
 		DestroyWindow(hWnd);
 	} break;
 	case WM_VSCROLL: {

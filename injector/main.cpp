@@ -1,9 +1,10 @@
 #include <windows.h>
 #include <iostream>
+#include <map>
 
 #include "../src/interface.hpp"
 #include "../src/PipeServer.hpp"
-#include "../src/Gui.hpp"
+#include "Gui.hpp"
 
 HWND hStart;		// handle to start button
 
@@ -100,20 +101,69 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		Action::TYPE type;
 		Task<unsigned char*>& task;
 		TaskQueue(const Action& action, Task<unsigned char*>& task) : type{ action.type }, task{ task } {}
+		~TaskQueue() {
+			task.freeMemory();
+		}
 	};
 	std::vector<Address> addresses;
 	addresses.push_back(Address(L"Jörgen", 1, 1));
 	addresses.push_back(Address(L"YOLO", 2, 8));
 	addresses.push_back(Address(L"HanHan", 23, 1));
 	std::vector<TaskQueue> actions;
+	std::size_t pos = 0;
 	unsigned char _msg[] = {255, 255, 0, 255};
 
+	std::vector<ScareEventCp> events;
 	Gui gui(hInst, addresses);
 
 	bool run = true;
 	while (run) {
+		if (events.size() > 5) {
+			pos = 1;
+		}
+		if (pos < actions.size()) {
+			Task<unsigned char*>::STATUS_CODE sc = actions[pos].task.getState();
+			if (sc == Task<unsigned char*>::SUCCESS) {
+				actions[pos].~TaskQueue();
+				memset(&actions[pos], 0, sizeof(TaskQueue));
+				++pos;
+			}
+			else if (sc == Task<unsigned char*>::FAILED || sc == Task<unsigned char*>::ERROR_TO_SHORT) ++pos;
+		}
 		Action action = gui.update();
 		switch (action.type) {
+		case Action::EV_SETUP: {
+			ScareEvent * scareEv = *reinterpret_cast<ScareEvent**>(action.data);
+			/* MessageBox(NULL,
+				(std::to_string(scareEv->target) + "  " + scareEv->file).c_str(),
+				"SetUpEvent", MB_OK); */
+			events.emplace_back( scareEv );
+			events.back().evState = ScareEvent::SETTET;
+			// check if data already exiist 
+			// check if user has data or is already pending
+			// delete action.data; ?? dont work
+			// check if already setet
+			// ConvertIamge to DDS
+			// save Path and convertet for later
+			// send dds to Person
+			// on success set addressState state Set
+			// MessageBox(NULL, std::to_string(events.back().id).c_str(), "Last id", MB_OK);
+		}	break;
+		case Action::EV_UPADTE:
+			// same as SetUp but withput set referens
+			break;
+		case Action::EV_TRIGGER: {
+			int target = *reinterpret_cast<int*>(action.data);
+			for (auto itr = events.begin(); itr != events.end(); ++itr) {
+				if (itr->target == target && itr->isValid()) {
+					MessageBox(NULL, (std::to_string(itr->target) + "  " + itr->file).c_str(), "Action", MB_OK);
+					break;
+				}
+			}
+				// check if dds path setet
+				// send trigger
+				// clear file
+		}	break;
 		case Action::SETCOLOR:
 			actions.push_back(TaskQueue(
 				action,

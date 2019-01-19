@@ -1,5 +1,7 @@
 #include "Gui.hpp"
 
+std::size_t ScareEvent::num = 0;
+
 static void showError(const char* caption, DWORD error) {
 	LPSTR msg = 0;
 	if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
@@ -114,6 +116,7 @@ Gui::Gui(HINSTANCE hInst, std::vector<Address>& addresses) : addresses{addresses
 		pState->nifMenu = _iconMenu;
 		_hInput = CreateWindowW(L"MainWindow", applicationName, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 			DIM_MAINWIN.x, DIM_MAINWIN.y, DIM_MAINWIN.width, DIM_MAINWIN.height, NULL, NULL, NULL, pState);
+		pState->hMain = _hInput;
 	}
 
 	NOTIFYICONDATAW note = { 0 };
@@ -146,6 +149,21 @@ const Action Gui::update() {
 				DispatchMessageW(&winMsg);
 			}
 			break;
+		case WM_SETUPEVENT: {
+			unsigned char *wp = new unsigned char[sizeof(ScareEvent*)];
+			*reinterpret_cast<LPARAM*>(wp) = winMsg.lParam;
+			return Action(Action::EV_SETUP, sizeof(ScareEvent*), wp);
+		} break;
+		case WM_UPDATEVENT: {
+			unsigned char *wp = new unsigned char[sizeof(int)];
+			*reinterpret_cast<int*>(wp) = winMsg.wParam;
+			return Action(Action::EV_UPADTE, sizeof(int), wp);
+		}	break;
+		case WM_TRIGGEREVENT: {
+			unsigned char *wp = new unsigned char[sizeof(int)];
+			*reinterpret_cast<int*>(wp) = winMsg.wParam;
+			return Action(Action::EV_TRIGGER, sizeof(int), wp);
+		} break;
 		case WM_SETCOLOR: {
 			unsigned char *wp = new unsigned char[4];
 			*reinterpret_cast<WPARAM*>(wp) = winMsg.wParam;
@@ -219,6 +237,7 @@ void addUI(HWND hWnd, EventWinState* pState) {
 	w = (w - 6) / 2;
 	h = (h -6) / 2;
 	CreateWindowW(L"button", L"X", WS_VISIBLE | WS_CHILD, 2, 2, w, h, hWnd, (HMENU)COM_CLOSE, NULL, NULL);
+	pState->hState = CreateWindowW(L"static", L"U", WS_VISIBLE | WS_CHILD, 4 + w, 2, w, h, hWnd, NULL, NULL, NULL);
 	CreateWindowW(L"button", L"F", WS_VISIBLE | WS_CHILD, 2, h + 2, w, h, hWnd, (HMENU)COM_SETFILE, NULL, NULL);
 	CreateWindowW(L"button", L"T", WS_VISIBLE | WS_CHILD, 4 + w, h + 2, w , h, hWnd, (HMENU)COM_SETTARGET, NULL, NULL);
 }
@@ -519,7 +538,11 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		if (pState->hEvents.size() == 0) break;
 		HWND hEvent = (pState->hEvents[0]);
 		EventWinState *eState = reinterpret_cast<EventWinState*>(GetWindowLongPtrW(hEvent, GWLP_USERDATA));
-		MessageBox(NULL, eState->file, "EVENT", MB_OK | MB_APPLMODAL);
+		if (eState->evState == ScareEvent::SETTET) {
+			PostMessageA(NULL, WM_TRIGGEREVENT, eState->id, NULL);
+		} else {
+			MessageBox(NULL, "Filed is still loading", "Cant Trigger Event Now", MB_OK | MB_ICONERROR);
+		}
 	}  break;
 	// default: MessageBox(NULL, std::to_string(com).c_str(), "COMANND", MB_OK);
 	}
@@ -546,22 +569,51 @@ bool getOpenFileName(char* fileName, int size, const char* path)
 	return GetOpenFileNameA(&fop);
 }
 
+void triggerSetupWhenComplete(HWND hWnd, EventWinState *pState) {
+	if (pState->file != nullptr && pState->target >= 0) {
+		if (pState->evState == ScareEvent::NOT) {
+			PostMessageW(NULL, WM_SETUPEVENT, NULL, (LPARAM)pState);
+			SetWindowTextW(pState->hState, L"L");
+			pState->evState = ScareEvent::WILLSET;
+		} else {
+			PostMessageW(NULL, WM_UPDATEVENT, pState->id, NULL);
+			SetWindowTextW(pState->hState, L"L");
+			pState->evState = ScareEvent::WILLSET;
+		}
+	}
+}
+
 LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	int com = 0;
 	EventWinState* pState = reinterpret_cast<EventWinState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
 	switch (msg) {
+	case WM_DESTROYCHILD:
+		EnableWindow(pState->mainState->hMain, TRUE);
+		SetForegroundWindow(pState->mainState->hMain);
+		break;
 	case WM_CREATE: {
 		CREATESTRUCTW *pCreate = reinterpret_cast<CREATESTRUCTW*>(lParam);
 		pState = reinterpret_cast<EventWinState*>(pCreate->lpCreateParams);
 		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pState);
 		pState->file = nullptr;
 		pState->target = -1;
+		pState->evState = ScareEvent::NOT;
 		pState->readTarget = false;
 		pState->mainState = nullptr;
 		addUI(hWnd, pState);
 	} break;
+	case WM_PAINT:
+		if (pState->evState == ScareEvent::WILLSET) {
+			pState->evState = ScareEvent::SETTET;
+			SetWindowTextW(pState->hState, L"R");
+		}
+		return DefWindowProcW(hWnd, msg, wParam, lParam);
+		break;
 	case WM_DESTROY:
-		if (pState) delete pState;
+		if (pState) { 
+			SetWindowLongPtrW(hWnd, GWLP_USERDATA, NULL);
+			delete pState;
+		};
 		break;
 	case WM_COMMAND: com = wParam; break;
 	default:
@@ -569,12 +621,16 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 	}
 	switch (com) {
 	case COM_SELECTITEM:
+		EnableWindow(pState->mainState->hMain, TRUE);
+		SetForegroundWindow(pState->mainState->hMain);
 		if (pState->readTarget) {
 			pState->readTarget = false;
+			if (pState->target == lParam) break; // no changes
 			if (pState->target >= 0) pState->mainState->reservt[pState->target] -= 1;
 			pState->target = lParam;
 			pState->mainState->reservt[pState->target] += 1;
 		}
+		triggerSetupWhenComplete(hWnd, pState);
 		break;
 	case COM_SETFILE: {
 		char name[512];
@@ -582,13 +638,17 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		if (!getOpenFileName(name, 512, pState->file)) {
 			showError("Can't get File", GetLastError());
 		} else {
-			if (pState->file) delete[] pState->file;
+			if (pState->file) {
+				if (strcmp(name, pState->file) == 0) break; // no changes
+				delete[] pState->file;
+			}
 			char*c = name;
 			while (*c) ++c;
 			++c;
 			pState->file = new char[c - name];
 			memcpy(pState->file, name, c - name);
 		}
+		triggerSetupWhenComplete(hWnd, pState);
 	}	break;
 	case COM_SETTARGET: {
 		pState->readTarget = true;
@@ -597,6 +657,7 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 			while (n = GetParent(main)) main = n;
 			pState->mainState = reinterpret_cast<MainWinState*>(GetWindowLongPtrW(main, GWLP_USERDATA));
 		}
+		EnableWindow(pState->mainState->hMain, FALSE);
 		AddressBookState* state = new (std::nothrow) AddressBookState{pState->mainState->addresses, pState->mainState->reservt};
 		CreateWindowW(L"AddressBookWin", L"Your Tickets", WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_VSCROLL,
 			DIM_ADDRESSBOOK.x, DIM_ADDRESSBOOK.y, DIM_ADDRESSBOOK.width, DIM_ADDRESSBOOK.height,
@@ -667,6 +728,10 @@ LRESULT CALLBACK AddressBookProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
 		SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)pState);
 		addUI(hWnd, pState);
 	} break;
+	case WM_CLOSE:
+		PostMessageW(pState->parent, WM_DESTROYCHILD, NULL, (LPARAM)hWnd);
+		DestroyWindow(hWnd);
+		break;
 	case WM_DESTROY: {
 		if (pState) delete pState;
 	} break;

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <windows.h>
 
 #include "../src/interface.hpp"
@@ -14,8 +16,9 @@ struct Address {
 constexpr int WM_SETCOLOR = WM_USER + 1; // wParam = rgba8
 constexpr int WM_DESTROYCHILD = WM_USER + 2; // child has been detsroyd, lParam = ChlidHandle
 constexpr int WM_NOTIFICATIONCALLBACK = WM_USER + 3;
-constexpr int WM_SETUPEVENT = WM_USER + 4; // wParam int user_id, lParam char* filename
-constexpr int WM_TRIGGEREVENT = WM_USER + 5; // wParam int user_id
+constexpr int WM_SETUPEVENT = WM_USER + 4; // lParam *ScareEvent
+constexpr int WM_UPDATEVENT = WM_USER + 5; // wParam int eventId
+constexpr int WM_TRIGGEREVENT = WM_USER + 6; // wParam int event_id
 
 constexpr int COM_SETCOLOR = 1;
 constexpr int COM_ADDQUEUE = 2;
@@ -66,7 +69,7 @@ struct AddressBookState {
 };
 
 struct MainWinState {
-	HWND hColorE{ 0 }, hQueueBox{ 0 };
+	HWND hColorE{ 0 }, hQueueBox{ 0 }, hMain;
 	HMENU nifMenu;
 	MainWinState(std::vector<Address>& adrs, std::vector<int>& res) : addresses{ adrs }, reservt{ res } {}
 	std::vector<Address>& addresses;
@@ -96,15 +99,69 @@ struct QueueWinState {
 	std::vector<HWND> hEvents;
 };
 
-struct EventWinState {
-	char* file{ nullptr };
-	int target{ 0 };
-	bool readTarget;
-	MainWinState* mainState;
+class ScareEventCp;
+
+class ScareEvent {
+	static std::size_t num;
+	ScareEventCp * cp;
+	void(ScareEventCp::*cl)();
+	bool hasCp;
+public:
+	bool hasNoCopy() { return !hasCp; }
+	void unRef() {
+		if (hasCp) cp = nullptr;
+	}
+	bool setCopy(ScareEventCp *cse, void (ScareEventCp::*close)()) {
+		if (hasCp) return false;
+		hasCp = true;
+		cp = cse;
+		cl = close;
+		return true;
+	}
+	ScareEvent() : id{ num++ }, cp{ nullptr }, cl{ nullptr }, hasCp{false} {}
+	ScareEvent(const ScareEvent&) = delete;
+	ScareEvent(const ScareEvent&&) = delete;
+	ScareEvent& operator=(const ScareEvent&) = delete;
+	ScareEvent& operator=(const ScareEvent&&) = delete;
+	~ScareEvent() {
+		if (hasCp && cp) (cp->*cl)();
+	}
+	const std::size_t id;
+	char *file{ nullptr };
+	int target{ -1 };
+	enum STATE { NOT, WILLSET, SETTET } evState{ NOT };
 };
 
+class ScareEventCp {
+	bool valid;
+	ScareEvent* ch;
+public:
+	ScareEvent::STATE& evState;
+	const std::size_t & id;
+	char* const& file;
+	const int & target;
+	void close() { 
+		valid = false;
+	}
+	bool isValid() { return valid; }
+	ScareEventCp(ScareEvent* se) : ch{ se }, evState{ se->evState }, id{ se->id }, file{ se->file }, target{se->target} {
+		valid = se->setCopy(this, &ScareEventCp::close);
+	}
+	~ScareEventCp() {
+		if(valid)ch->unRef();
+	}
+};
+
+struct EventWinState : public ScareEvent {
+	bool readTarget;
+	HWND hState;
+	MainWinState* mainState;
+};
+// setup Event data = PtrScareEvent
+// cancle Event data = int<id>
+// trigger Event data = int<id>
 struct Action {
-	enum TYPE { SETCOLOR, CLOSE, NOTHING } type;
+	enum TYPE { EV_SETUP, EV_TRIGGER, EV_UPADTE, SETCOLOR, CLOSE, NOTHING } type;
 	unsigned char *data;
 	const std::size_t size;
 	Action(TYPE t, const std::size_t size = 0, unsigned char* data = nullptr) : type{ t }, data{ data }, size{ size } {}

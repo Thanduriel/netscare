@@ -54,6 +54,9 @@ public:
 		bFailed = false;
 	}
 	void setPipeHandle(HANDLE pipe) { this->pipe = pipe; }
+	void freeMemory() {
+		if (begin) delete[] begin;
+	}
 	bool start() {
 		HANDLE hEvent = overlap.hEvent;
 		overlap = {0};

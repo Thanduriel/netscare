@@ -61,4 +61,24 @@ SendHttpPostResponse(
 	IN PHTTP_REQUEST pRequest
 );
 
-ULONG runServer(int urlC, wchar_t **urls);
+class NetScareServer {
+	int urlC;
+	wchar_t **urls;
+	int urlAdded;
+	HANDLE hReqQueue;
+	ULONG redCode;
+	OVERLAPPED overlapped;
+	bool bPending;
+
+	HTTP_REQUEST_ID    requestId;
+	DWORD              bytesRead;
+	PHTTP_REQUEST      pRequest;
+	PCHAR              pRequestBuffer;
+	ULONG RequestBufferLength = sizeof(HTTP_REQUEST) + 2048; // buffer size = 2KB
+public:
+	NetScareServer(int urlC, wchar_t **urls);
+	~NetScareServer();
+	ULONG GetLastRedCode() { return redCode; }
+	ULONG updateServer(BOOL wait = FALSE);
+};
+

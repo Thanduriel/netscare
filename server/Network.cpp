@@ -1,176 +1,151 @@
 #include "Network.hpp"
 
-ULONG runServer(int urlC, wchar_t **urls) {
+NetScareServer::NetScareServer(int urlC, wchar_t **urls) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{0} {
 	ULONG retCode;
-	HANDLE hReqQueue = NULL;
-	int urlAdded = 0;
 	HTTPAPI_VERSION httpApiVersion = HTTPAPI_VERSION_1;
-
+	DWORD a = 0;
 	retCode = HttpInitialize(httpApiVersion, HTTP_INITIALIZE_SERVER, NULL);
 	if (retCode != NO_ERROR) {
 		wprintf(L"HttpInit failed with: %lu\n", retCode);
-		return retCode;
+		return;
 	}
+	a = GetLastError();
 
 	retCode = HttpCreateHttpHandle(&hReqQueue, 0);
 	if (retCode != NO_ERROR) {
 		wprintf(L"HttpCreaetHadnle failed with: %ul\n", retCode);
-		return retCode;
+		return;
 	}
+	a = GetLastError();
 
 	for (int i = 1; i < urlC; ++i) {
 		wprintf(L"listening for requests on the following url: %s\n", urls[i]);
 		retCode = HttpAddUrl(hReqQueue, urls[i], NULL);
 		if (retCode != NO_ERROR) {
 			wprintf(L"HttpAddUrl failed with %lu \n", retCode);
-			goto CleanUp;
+			// this->~NetScareServer();
 		}
 		else {
-			//
-			// Track the currently added URLs.
-			//
 			++urlAdded;
 		}
+		a = GetLastError();
 	}
+	pRequestBuffer = (PCHAR)ALLOC_MEM(RequestBufferLength);
+	retCode = ERROR_NOT_ENOUGH_MEMORY;
+	if (pRequestBuffer == NULL) return;
+	pRequest = reinterpret_cast<PHTTP_REQUEST>(pRequestBuffer);
+	a = GetLastError();
+	overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	a = GetLastError();
+}
 
-	DoReceiveRequests(hReqQueue);
-
-CleanUp:
+NetScareServer::~NetScareServer() {
+	FREE_MEM(pRequestBuffer);
 	for (int i = 1; i <= urlAdded; ++i) {
 		HttpRemoveUrl(hReqQueue, urls[i]);
 	}
 	if (hReqQueue) CloseHandle(hReqQueue);
 	HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
-	return retCode;
+	HTTP_SET_NULL_ID(&requestId);
 }
 
-DWORD DoReceiveRequests(IN HANDLE hReqQueue) {
+DWORD NetScareServer::updateServer(BOOL wait) {
 	ULONG              result;
-	HTTP_REQUEST_ID    requestId;
-	DWORD              bytesRead;
-	PHTTP_REQUEST      pRequest;
-	PCHAR              pRequestBuffer;
-	ULONG RequestBufferLength = sizeof(HTTP_REQUEST) + 2048; // buffer size = 2KB
-	pRequestBuffer = (PCHAR)ALLOC_MEM(RequestBufferLength);
-
-	if (pRequestBuffer == NULL) return ERROR_NOT_ENOUGH_MEMORY;
-
-	pRequest = reinterpret_cast<HTTP_REQUEST*>(pRequestBuffer);
-	HTTP_SET_NULL_ID(&requestId);
-
-	while (true) {
+	DWORD a = 0;
+	if (!bPending) {
+		ResetEvent(overlapped.hEvent);
+		HANDLE hEv = overlapped.hEvent;
+		overlapped = { 0 };
+		overlapped.hEvent = hEv;
 		RtlZeroMemory(pRequest, RequestBufferLength);
-
+		a = GetLastError();
 		result = HttpReceiveHttpRequest(
 			hReqQueue,
 			requestId,
 			0,
 			pRequest,
 			RequestBufferLength,
-			&bytesRead,
-			NULL // Overlapped
+			NULL,
+			&overlapped
 		);
-
-		if (result == NO_ERROR) {
-			switch (pRequest->Verb)
-			{
-			case HttpVerbGET:
-				wprintf(L"Got a GET request for %ws \n",
-					pRequest->CookedUrl.pFullUrl);
-
-				result = SendHttpResponse(
-					hReqQueue,
-					pRequest,
-					200,
-					"OK",
-					"Hey! You hit the server \r\n"
-				);
-				break;
-
-			case HttpVerbPOST:
-
-				wprintf(L"Got a POST request for %ws \n",
-					pRequest->CookedUrl.pFullUrl);
-
-				result = SendHttpPostResponse(hReqQueue, pRequest);
-				break;
-
-			default:
-				wprintf(L"Got a unknown request for %ws \n",
-					pRequest->CookedUrl.pFullUrl);
-
-				result = SendHttpResponse(
-					hReqQueue,
-					pRequest,
-					503,
-					"Not Implemented",
-					NULL
-				);
-				break;
-			}
-
-			if (result != NO_ERROR)
-			{
-				break;
-			}
-
-			//
-			// Reset the Request ID to handle the next request.
-			//
-			HTTP_SET_NULL_ID(&requestId);
+		a = GetLastError();
+	} else {
+		if (overlapped.Internal == STATUS_PENDING) return ERROR_IO_PENDING;
+		wprintf_s(L"Fin");
+		a = GetLastError();
+		a = GetLastError();
+		if (!GetOverlappedResult(hReqQueue, &overlapped, &bytesRead, TRUE)) {
+			wprintf_s(L"GetOverError %ul", GetLastError());
+			result = GetLastError();
+		} else {
+			result = 0;
 		}
-		else if (result == ERROR_MORE_DATA)
+		bPending = false;
+	}
+
+	if (result == ERROR_IO_PENDING) {
+		a = GetLastError();
+		bPending = true;
+		return ERROR_IO_PENDING;
+	} else if (result == NO_ERROR) {
+		switch (pRequest->Verb)
 		{
-			//
-			// The input buffer was too small to hold the request
-			// headers. Increase the buffer size and call the 
-			// API again. 
-			//
-			// When calling the API again, handle the request
-			// that failed by passing a RequestID.
-			//
-			// This RequestID is read from the old buffer.
-			//
-			requestId = pRequest->RequestId;
-
-			//
-			// Free the old buffer and allocate a new buffer.
-			//
-			RequestBufferLength = bytesRead;
-			FREE_MEM(pRequestBuffer);
-			pRequestBuffer = (PCHAR)ALLOC_MEM(RequestBufferLength);
-
-			if (pRequestBuffer == NULL)
-			{
-				result = ERROR_NOT_ENOUGH_MEMORY;
-				break;
-			}
-
-			pRequest = (PHTTP_REQUEST)pRequestBuffer;
-
-		}
-		else if (ERROR_CONNECTION_INVALID == result &&
-			!HTTP_IS_NULL_ID(&requestId))
-		{
-			// The TCP connection was corrupted by the peer when
-			// attempting to handle a request with more buffer. 
-			// Continue to the next request.
-
-			HTTP_SET_NULL_ID(&requestId);
-		}
-		else
-		{
+		case HttpVerbGET:
+			wprintf(L"Got a GET request for %ws \n",
+				pRequest->CookedUrl.pFullUrl);
+			result = SendHttpResponse(
+				hReqQueue,
+				pRequest,
+				200,
+				"OK",
+				"Hey! You hit the server \r\n"
+			);
 			break;
+		case HttpVerbPOST:
+			wprintf(L"Got a POST request for %ws \n",
+				pRequest->CookedUrl.pFullUrl);
+			result = SendHttpPostResponse(hReqQueue, pRequest);
+			break;
+		default:
+			wprintf(L"Got a unknown request for %ws \n",
+				pRequest->CookedUrl.pFullUrl);
+			result = SendHttpResponse(
+				hReqQueue,
+				pRequest,
+				503,
+				"Not Implemented",
+				NULL
+			);
+		break;
+		}
+		
+		if (result != NO_ERROR) { return result;}
+		HTTP_SET_NULL_ID(&requestId);
+	}
+	else if (result == ERROR_MORE_DATA)
+	{
+		requestId = pRequest->RequestId;
+		RequestBufferLength = bytesRead;
+		FREE_MEM(pRequestBuffer);
+		pRequestBuffer = (PCHAR)ALLOC_MEM(RequestBufferLength);
+		
+		if (pRequestBuffer == NULL) {
+			return ERROR_NOT_ENOUGH_MEMORY;
 		}
 
-	}
+		pRequest = (PHTTP_REQUEST)pRequestBuffer;
 
-	if (pRequestBuffer)
+	}
+	else if (ERROR_CONNECTION_INVALID == result && !HTTP_IS_NULL_ID(&requestId))
 	{
-		FREE_MEM(pRequestBuffer);
+		HTTP_SET_NULL_ID(&requestId);
 	}
-
-	return result;
+	else
+	{
+		wprintf_s(L"Random error %ul", result);
+		return result;
+	}
+	return 0;
 }
 
 DWORD SendHttpResponse(
@@ -396,8 +371,47 @@ DWORD SendHttpPostResponse(
 				//       use a ULONGLONG.
 				// 
 
+				char * data = new char[TotalBytesRead + 1];
+				data[TotalBytesRead] = 0;
+				DWORD res = 0;
+				if (SetFilePointer(hTempFile, 0, 0, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+					wprintf(L"ERROR: %ud", GetLastError());
+				ReadFile(hTempFile, data, TotalBytesRead, &res, NULL);
+				int x, y;
+				bool bX = false, bY = false;
+				char* c = data;
+				while ((!bX || !bY) && *c != 0) {
+					if (*c == 'x' && *(c + 1) == '=') {
+						bX = true;
+						c += 2;
+						char *s = c;
+						while (*c != '&' && *c != 0) ++c;
+						*c = 0;
+						x = atoi(s);
+					}
+					else if (*c == 'y' && *(c + 1) == '=') {
+						bY = true;
+						c += 2;
+						char *s = c;
+						while (*c != '&' && *c != 0) ++c;
+						*c = 0;
+						y = atoi(s);
+					}
+					else {
+						wprintf(L"Error");
+						while (*c != 0 && *c != '&') ++c;
+					}
+					++c;
+				}
 
-				sprintf_s(szContentLength, MAX_ULONG_STR, "%lu", TotalBytesRead);
+				delete[] data;
+				char msg[25];
+				sprintf_s(msg, "&res=%d", (bX ? x : 0) + (bY ? y : 0));
+				res = strlen(msg);
+				WriteFile(hTempFile, msg, res, &res, NULL);
+
+
+				sprintf_s(szContentLength, MAX_ULONG_STR, "%lu", TotalBytesRead + res);
 
 				ADD_KNOWN_HEADER(
 					response,
@@ -437,48 +451,7 @@ DWORD SendHttpPostResponse(
 				dataChunk.FromFileHandle.
 					ByteRange.StartingOffset.QuadPart = 0;
 
-				dataChunk.FromFileHandle.
-					ByteRange.Length.QuadPart =
-					HTTP_BYTE_RANGE_TO_EOF;
-
-				char * data = new char[BytesRead + 1];
-				data[BytesRead] = 0;
-				DWORD res = 0;
-				if (!SetFilePointer(hTempFile, 0, 0, FILE_BEGIN))
-					wprintf(L"ERROR: %ud", GetLastError());
-				ReadFile(hTempFile, data, BytesRead, &res, NULL);
-				int x, y;
-				bool bX = false, bY = false;
-				char* c = data;
-				while ((!bX || !bY) && *c != 0) {
-					if (*c == 'x' && *(++c) == '=') {
-						bX = true;
-						char *s = ++c;
-						while (*c != '&' && *c != 0) ++c;
-						*c = 0;
-						x = atoi(s);
-					}
-					else if (*c == 'y') {
-						bY = true;
-						char *s = ++c;
-						while (*c != '&' && *c != 0) ++c;
-						*c = 0;
-						y = atoi(s);
-					}
-					else {
-						wprintf(L"Error");
-						while (*c != 0 && *c != '&') ++c;
-					}
-					++c;
-				}
-
-				delete[] data;
-				char msg[25];
-				sprintf_s(msg, "res=%d", (bX ? x : 0) + (bY ? y : 0 ));
-				res = strlen(msg);
-				WriteFile(hTempFile, msg, res, &res, NULL);
-
-
+				dataChunk.FromFileHandle.ByteRange.Length.QuadPart = HTTP_BYTE_RANGE_TO_EOF;
 				dataChunk.FromFileHandle.FileHandle = hTempFile;
 
 				result = HttpSendResponseEntityBody(
@@ -550,7 +523,7 @@ Done:
 	if (INVALID_HANDLE_VALUE != hTempFile)
 	{
 		CloseHandle(hTempFile);
-		// DeleteFile(szTempName);
+		DeleteFile(szTempName);
 	}
 
 	return result;

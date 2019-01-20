@@ -101,9 +101,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		Action::TYPE type;
 		Task<unsigned char*>& task;
 		TaskQueue(const Action& action, Task<unsigned char*>& task) : type{ action.type }, task{ task } {}
-		~TaskQueue() {
-			task.freeMemory();
-		}
 	};
 	std::vector<Address> addresses;
 	addresses.push_back(Address(L"Jörgen", 1, 1));
@@ -130,7 +127,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		Action action = gui.update();
 		switch (action.type) {
 		case Action::EV_SETUP: {
-			ScareEvent * scareEv = *reinterpret_cast<ScareEvent**>(action.data);
+			ScareEvent * scareEv = reinterpret_cast<ScareEvent*>(action.data);
 			/* MessageBox(NULL,
 				(std::to_string(scareEv->target) + "  " + scareEv->file).c_str(),
 				"SetUpEvent", MB_OK); */
@@ -166,7 +163,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		}	break;
 		case Action::SETCOLOR:
 			actions.push_back(TaskQueue(
-				action,
+				std::move(action),
 				WriteTask<unsigned char*>(action.begin(), action.end())
 			));
 			pipeServer.addTask(pipeId, actions.back().task);

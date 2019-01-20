@@ -133,9 +133,7 @@ const Action Gui::update() {
 			}
 			break;
 		case WM_SETUPEVENT: {
-			unsigned char *wp = new unsigned char[sizeof(ScareEvent*)];
-			*reinterpret_cast<LPARAM*>(wp) = winMsg.lParam;
-			return Action(Action::EV_SETUP, sizeof(ScareEvent*), wp);
+			return Action(Action::EV_SETUP, sizeof(ScareEvent*), reinterpret_cast<unsigned char*>(winMsg.lParam), false);
 		} break;
 		case WM_UPDATEVENT: {
 			unsigned char *wp = new unsigned char[sizeof(int)];
@@ -148,9 +146,8 @@ const Action Gui::update() {
 			return Action(Action::EV_TRIGGER, sizeof(int), wp);
 		} break;
 		case WM_SETCOLOR: {
-			unsigned char *wp = new unsigned char[4];
-			*reinterpret_cast<WPARAM*>(wp) = winMsg.wParam;
-			return Action(Action::SETCOLOR, 4, wp);
+			*reinterpret_cast<WPARAM*>(bgColor) = winMsg.wParam;
+			return Action(Action::SETCOLOR, 4, bgColor, false);
 		}
 		break;
 		default:

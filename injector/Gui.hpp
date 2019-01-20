@@ -180,9 +180,10 @@ struct Action {
 	enum TYPE { EV_SETUP, EV_TRIGGER, EV_UPADTE, SETCOLOR, CLOSE, NOTHING } type;
 	unsigned char *data;
 	const std::size_t size;
-	Action(TYPE t, const std::size_t size = 0, unsigned char* data = nullptr) : type{ t }, data{ data }, size{ size } {}
+	bool clear{ true };
+	Action(TYPE t, const std::size_t size = 0, unsigned char* data = nullptr, bool clear = true) : type{ t }, data{ data }, size{ size }, clear{clear} {}
 	~Action() {
-		if (data) delete[] data;
+		if (clear && data) delete[] data;
 	}
 	unsigned char* begin() { return data; }
 	unsigned char* end() { return data + size; }
@@ -195,6 +196,7 @@ class Gui {
 	HMENU _iconMenu;
 	std::vector<Address>& addresses;
 	std::vector<int> reservt; // tickets on hold
+	unsigned char bgColor[4];
 public:
 	Gui(HINSTANCE, std::vector<Address>&);
 	~Gui() {

@@ -249,18 +249,6 @@ DWORD SendHttpPostResponse(
 	// Initialize the HTTP response structure.
 	//
 	INITIALIZE_HTTP_RESPONSE(&response, 200, "OK");
-
-	//
-	// For POST, echo back the entity from the
-	// client
-	//
-	// NOTE: If the HTTP_RECEIVE_REQUEST_FLAG_COPY_BODY flag had been
-	//       passed with HttpReceiveHttpRequest(), the entity would 
-	//       have been a part of HTTP_REQUEST (using the pEntityChunks
-	//       field). Because that flag was not passed, there are no
-	//       o entity bodies in HTTP_REQUEST.
-	//
-
 	if (pRequest->Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS)
 	{
 		// The entity body is sent over multiple calls. Collect 

@@ -103,7 +103,7 @@ protected:
 	bool bFailed;
 	void update(BOOL wait = FALSE) {
 		if (!fPending) return;
-		BOOL bWork = WaitForSingleObject(overlap.hEvent, 0);
+		BOOL bWork = overlap.Internal == STATUS_PENDING;
 		if (bWork) return;
 		BOOL bFin = GetOverlappedResult(pipe, &overlap, &length, wait);
 		DWORD lastError = GetLastError();

@@ -49,9 +49,10 @@ NetScareServer::~NetScareServer() {
 	HTTP_SET_NULL_ID(&requestId);
 }
 
-DWORD NetScareServer::updateServer(BOOL wait) {
+DWORD NetScareServer::updateServer(Action& action, BOOL wait) {
 	ULONG              result;
 	DWORD a = 0;
+	action.type = Action::NOT_SET;
 	if (!bPending) {
 		ResetEvent(overlapped.hEvent);
 		HANDLE hEv = overlapped.hEvent;
@@ -104,7 +105,7 @@ DWORD NetScareServer::updateServer(BOOL wait) {
 		case HttpVerbPOST:
 			wprintf(L"Got a POST request for %ws \n",
 				pRequest->CookedUrl.pFullUrl);
-			result = SendHttpPostResponse(hReqQueue, pRequest);
+			result = SendHttpPostResponse(action, hReqQueue, pRequest);
 			break;
 		default:
 			wprintf(L"Got a unknown request for %ws \n",
@@ -211,6 +212,7 @@ DWORD SendHttpResponse(
 	return result;
 }
 DWORD SendHttpPostResponse(
+	NetScareServer::Action &action,
 	IN HANDLE        hReqQueue,
 	IN PHTTP_REQUEST pRequest
 )
@@ -320,17 +322,6 @@ DWORD SendHttpPostResponse(
 				break;
 
 			case ERROR_HANDLE_EOF: {
-
-				//
-				// The last request entity body has been read.
-				// Send back a response. 
-				//
-				// To illustrate entity sends via 
-				// HttpSendResponseEntityBody, the response will 
-				// be sent over multiple calls. To do this,
-				// pass the HTTP_SEND_RESPONSE_FLAG_MORE_DATA
-				// flag.
-
 				if (BytesRead != 0)
 				{
 					TotalBytesRead += BytesRead;
@@ -342,23 +333,6 @@ DWORD SendHttpPostResponse(
 						NULL
 					);
 				}
-
-				//
-				// Because the response is sent over multiple
-				// API calls, add a content-length.
-				//
-				// Alternatively, the response could have been
-				// sent using chunked transfer encoding, by  
-				// passimg "Transfer-Encoding: Chunked".
-				//
-
-				// NOTE: Because the TotalBytesread in a ULONG
-				//       are accumulated, this will not work
-				//       for entity bodies larger than 4 GB. 
-				//       For support of large entity bodies,
-				//       use a ULONGLONG.
-				// 
-
 				char * data = new char[TotalBytesRead + 1];
 				data[TotalBytesRead] = 0;
 				DWORD res = 0;
@@ -400,7 +374,6 @@ DWORD SendHttpPostResponse(
 
 
 				sprintf_s(szContentLength, MAX_ULONG_STR, "%lu", TotalBytesRead + res);
-
 				ADD_KNOWN_HEADER(
 					response,
 					HttpHeaderContentLength,

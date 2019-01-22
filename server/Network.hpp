@@ -44,22 +44,6 @@
 //
 // Prototypes.
 //
-DWORD DoReceiveRequests(HANDLE hReqQueue);
-
-DWORD
-SendHttpResponse(
-	IN HANDLE        hReqQueue,
-	IN PHTTP_REQUEST pRequest,
-	IN USHORT        StatusCode,
-	IN PSTR          pReason,
-	IN PSTR          pEntity
-);
-
-DWORD
-SendHttpPostResponse(
-	IN HANDLE        hReqQueue,
-	IN PHTTP_REQUEST pRequest
-);
 
 class NetScareServer {
 	int urlC;
@@ -76,9 +60,30 @@ class NetScareServer {
 	PCHAR              pRequestBuffer;
 	ULONG RequestBufferLength = sizeof(HTTP_REQUEST) + 2048; // buffer size = 2KB
 public:
+	struct Action {
+		enum TYPE { NOT_SET, USER_NEW, PIC_LOAD, EVENT_ADD, TRIGGER_EVENT } type;
+		Action() : type{ NOT_SET }, data{ nullptr } {}
+		char *data;
+	};
 	NetScareServer(int urlC, wchar_t **urls);
 	~NetScareServer();
 	ULONG GetLastRedCode() { return redCode; }
-	ULONG updateServer(BOOL wait = FALSE);
+	ULONG updateServer(Action& action, BOOL wait = FALSE);
 };
+
+DWORD
+SendHttpResponse(
+	IN HANDLE        hReqQueue,
+	IN PHTTP_REQUEST pRequest,
+	IN USHORT        StatusCode,
+	IN PSTR          pReason,
+	IN PSTR          pEntity
+);
+
+DWORD
+SendHttpPostResponse(
+	NetScareServer::Action &action,
+	IN HANDLE        hReqQueue,
+	IN PHTTP_REQUEST pRequest
+);
 

@@ -7,6 +7,11 @@ file(GLOB SOURCE_FILES
     "src/*.cpp"
 )
 
+file(GLOB SERVER_FILES
+    "server/*.hpp"
+    "server/*.cpp"
+)
+
 include(FindDirectX.cmake)
 
 add_compile_options("/I%(WindowsSDK_IncludePath)")
@@ -28,9 +33,9 @@ add_library(netscare SHARED ${SOURCE_FILES})
 target_link_libraries(netscare d3d11)
 target_link_libraries(netscare directXTK)
 
-add_executable(server server/main.cpp server/Network.hpp server/Network.cpp)
+add_executable(server ${SERVER_FILES})
 
-add_executable(testClient testClient/main.cpp)
+add_executable(testClient testClient/main.cpp server/Asn.hpp)
 
 add_executable(injector injector/main.cpp src/PipeServer.hpp src/PipeServer.cpp injector/Gui.cpp injector/Gui.hpp src/utils.cpp src/utils.hpp)
 target_link_libraries(injector netscare)

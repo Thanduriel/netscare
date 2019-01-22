@@ -40,6 +40,7 @@ class Task {
 	}
 
 public:
+	virtual ~Task() {}
 	enum TASK_TYPE {READ, WRITE};
 	enum STATUS_CODE { SUCCESS, NOT_STARTED, PENDING, FAILED, ERROR_TO_SHORT};
 	Task(const TASK_TYPE type, T begin, T end) : type{ type }, pipe{ 0 }, begin{ begin }, end{ end }, overlap{ 0 } {
@@ -93,6 +94,7 @@ public:
 	}
 	virtual STATUS_CODE getState(BOOL wait = FALSE) = 0;
 	const TASK_TYPE type;
+
 protected:
 	OVERLAPPED overlap;
 	DWORD length;
@@ -128,7 +130,7 @@ class WriteTask : public Task<T> {
 public:
 	WriteTask(T begin, T end) : Task{ Task::TASK_TYPE::WRITE, begin, end } {}
 	WriteTask(VEC&& data) : Task{ Task::TASK_TYPE::WRITE, data.begin(), data.end() }, _data{ data } {}
-	Task::STATUS_CODE getState(BOOL wait = FALSE) final {
+	Task<T>::STATUS_CODE getState(BOOL wait = FALSE) final {
 		update(wait);
 		if (bFailed) return Task::STATUS_CODE::FAILED;
 		else if (!bStarted) return Task::STATUS_CODE::NOT_STARTED;
@@ -146,7 +148,7 @@ template <typename T>
 class ReadTask : public Task<T> {
 public:
 	ReadTask(T buffer, std::size_t length) : Task{ Task::TASK_TYPE::READ, buffer, buffer + length } {}
-	Task::STATUS_CODE getState(BOOL wait = FALSE) final {
+	Task<T>::STATUS_CODE getState(BOOL wait = FALSE) final {
 		update(wait);
 		if (bFailed) return Task::STATUS_CODE::FAILED;
 		else if (!bStarted) return Task::STATUS_CODE::NOT_STARTED;

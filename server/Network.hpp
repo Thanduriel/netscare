@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -14,38 +16,24 @@
 
 #include <windows.h>
 #include <http.h>
-#include <stdio.h>
+#include <cstdio>
 #include <cstdlib>
+#include <iostream>
+#include <vector>
 
 #pragma comment(lib, "httpapi.lib")
 
-#define INITIALIZE_HTTP_RESPONSE( resp, status, reason )    \
-    do                                                      \
-    {                                                       \
-        RtlZeroMemory( (resp), sizeof(*(resp)) );           \
-        (resp)->StatusCode = (status);                      \
-        (resp)->pReason = (reason);                         \
-        (resp)->ReasonLength = (USHORT) strlen(reason);     \
-    } while (FALSE)
-
-#define ADD_KNOWN_HEADER(Response, HeaderId, RawValue)               \
-    do                                                               \
-    {                                                                \
-        (Response).Headers.KnownHeaders[(HeaderId)].pRawValue =      \
-                                                          (RawValue);\
-        (Response).Headers.KnownHeaders[(HeaderId)].RawValueLength = \
-            (USHORT) strlen(RawValue);                               \
-    } while(FALSE)
-
-#define ALLOC_MEM(cb) HeapAlloc(GetProcessHeap(), 0, (cb))
-
-#define FREE_MEM(ptr) HeapFree(GetProcessHeap(), 0, (ptr))
-
-//
-// Prototypes.
-//
+#include "Asn.hpp"
+#include "Types.hpp"
 
 class NetScareServer {
+public:
+	struct Action {
+		enum TYPE { NOT_SET, USER_NEW, PIC_LOAD, EVENT_ADD, TRIGGER_EVENT } type;
+		Action() : type{ NOT_SET }, data{ nullptr } {}
+		char *data;
+	};
+private:
 	int urlC;
 	wchar_t **urls;
 	int urlAdded;
@@ -59,31 +47,30 @@ class NetScareServer {
 	PHTTP_REQUEST      pRequest;
 	PCHAR              pRequestBuffer;
 	ULONG RequestBufferLength = sizeof(HTTP_REQUEST) + 2048; // buffer size = 2KB
+	DWORD SendHttpResponse(
+		IN HANDLE        hReqQueue,
+		IN PHTTP_REQUEST pRequest,
+		IN USHORT        StatusCode,
+		IN PSTR          pReason,
+		IN PSTR          pEntity
+	);
+	DWORD SendHttpPostResponse(
+		Action &action,
+		HANDLE        hReqQueue,
+		PHTTP_REQUEST pRequest
+	);
+	std::vector<User>& users;
 public:
-	struct Action {
-		enum TYPE { NOT_SET, USER_NEW, PIC_LOAD, EVENT_ADD, TRIGGER_EVENT } type;
-		Action() : type{ NOT_SET }, data{ nullptr } {}
-		char *data;
-	};
-	NetScareServer(int urlC, wchar_t **urls);
+	NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users);
 	~NetScareServer();
 	ULONG GetLastRedCode() { return redCode; }
 	ULONG updateServer(Action& action, BOOL wait = FALSE);
 };
 
-DWORD
-SendHttpResponse(
-	IN HANDLE        hReqQueue,
-	IN PHTTP_REQUEST pRequest,
-	IN USHORT        StatusCode,
-	IN PSTR          pReason,
-	IN PSTR          pEntity
-);
+void INITIALIZE_HTTP_RESPONSE(HTTP_RESPONSE* resp, USHORT status, const char* reason);
 
-DWORD
-SendHttpPostResponse(
-	NetScareServer::Action &action,
-	IN HANDLE        hReqQueue,
-	IN PHTTP_REQUEST pRequest
-);
+void ADD_KNOWN_HEADER(HTTP_RESPONSE& Response, int HeaderId, const char* RawValue);
 
+void* ALLOC_MEM(std::size_t size);
+
+void FREE_MEM(void* ptr);

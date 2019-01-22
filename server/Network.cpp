@@ -1,6 +1,8 @@
 #include "Network.hpp"
 
-NetScareServer::NetScareServer(int urlC, wchar_t **urls) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{0} {
+int User::num = 0;
+
+NetScareServer::NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{ 0 }, users{ users } {
 	ULONG retCode;
 	HTTPAPI_VERSION httpApiVersion = HTTPAPI_VERSION_1;
 	DWORD a = 0;
@@ -30,7 +32,7 @@ NetScareServer::NetScareServer(int urlC, wchar_t **urls) : urlC{ urlC }, urls{ u
 		}
 		a = GetLastError();
 	}
-	pRequestBuffer = (PCHAR)ALLOC_MEM(RequestBufferLength);
+	pRequestBuffer = reinterpret_cast<PCHAR>(ALLOC_MEM(RequestBufferLength));
 	retCode = ERROR_NOT_ENOUGH_MEMORY;
 	if (pRequestBuffer == NULL) return;
 	pRequest = reinterpret_cast<PHTTP_REQUEST>(pRequestBuffer);
@@ -128,7 +130,7 @@ DWORD NetScareServer::updateServer(Action& action, BOOL wait) {
 		requestId = pRequest->RequestId;
 		RequestBufferLength = bytesRead;
 		FREE_MEM(pRequestBuffer);
-		pRequestBuffer = (PCHAR)ALLOC_MEM(RequestBufferLength);
+		pRequestBuffer = reinterpret_cast<PCHAR>(ALLOC_MEM(RequestBufferLength));
 		
 		if (pRequestBuffer == NULL) {
 			return ERROR_NOT_ENOUGH_MEMORY;
@@ -149,7 +151,7 @@ DWORD NetScareServer::updateServer(Action& action, BOOL wait) {
 	return 0;
 }
 
-DWORD SendHttpResponse(
+DWORD NetScareServer::SendHttpResponse(
 	IN HANDLE        hReqQueue,
 	IN PHTTP_REQUEST pRequest,
 	IN USHORT        StatusCode,
@@ -211,10 +213,11 @@ DWORD SendHttpResponse(
 
 	return result;
 }
-DWORD SendHttpPostResponse(
-	NetScareServer::Action &action,
-	IN HANDLE        hReqQueue,
-	IN PHTTP_REQUEST pRequest
+
+DWORD NetScareServer::SendHttpPostResponse(
+	Action &action,
+	HANDLE        hReqQueue,
+	PHTTP_REQUEST pRequest
 )
 {
 	HTTP_RESPONSE   response;
@@ -238,7 +241,7 @@ DWORD SendHttpPostResponse(
 	// on demand.
 	//
 	EntityBufferLength = 2048;
-	pEntityBuffer = (PUCHAR)ALLOC_MEM(EntityBufferLength);
+	pEntityBuffer = reinterpret_cast<PUCHAR>(ALLOC_MEM(EntityBufferLength));
 
 	if (pEntityBuffer == NULL)
 	{
@@ -333,47 +336,28 @@ DWORD SendHttpPostResponse(
 						NULL
 					);
 				}
-				char * data = new char[TotalBytesRead + 1];
-				data[TotalBytesRead] = 0;
+				unsigned char * data = new unsigned char[TotalBytesRead];
 				DWORD res = 0;
+
 				if (SetFilePointer(hTempFile, 0, 0, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
 					wprintf(L"ERROR: %ud", GetLastError());
+
+
+
 				ReadFile(hTempFile, data, TotalBytesRead, &res, NULL);
-				int x, y;
-				bool bX = false, bY = false;
-				char* c = data;
-				while ((!bX || !bY) && *c != 0) {
-					if (*c == 'x' && *(c + 1) == '=') {
-						bX = true;
-						c += 2;
-						char *s = c;
-						while (*c != '&' && *c != 0) ++c;
-						*c = 0;
-						x = atoi(s);
-					}
-					else if (*c == 'y' && *(c + 1) == '=') {
-						bY = true;
-						c += 2;
-						char *s = c;
-						while (*c != '&' && *c != 0) ++c;
-						*c = 0;
-						y = atoi(s);
-					}
-					else {
-						wprintf(L"Error");
-						while (*c != 0 && *c != '&') ++c;
-					}
-					++c;
-				}
-
-				delete[] data;
-				char msg[25];
-				sprintf_s(msg, "&res=%d", (bX ? x : 0) + (bY ? y : 0));
-				res = strlen(msg);
-				WriteFile(hTempFile, msg, res, &res, NULL);
-
-
-				sprintf_s(szContentLength, MAX_ULONG_STR, "%lu", TotalBytesRead + res);
+				ASNObject *asn = ASNObject::DecodeAsn(data, TotalBytesRead);
+				std::uint8_t x, y;
+				if (asn->GetType() == ASNObject::ASCISTRING) {
+					if (strcmp(asn[0].DecodeString(), "calc") == 0) {
+						x = static_cast<std::uint8_t>(asn[1].DecodeInteger());
+						y = static_cast<std::uint8_t>(asn[2].DecodeInteger());
+					} else std::cout << "No calc operation: " << asn->DecodeString() << '\n';
+				} else std::cout << "No String Type: " << asn->GetType() << '\n';
+				char msg[] = {0x13, 0x04, 'r', 'e', 's', 0, 0x02, 0x01, x + y};
+				SetFilePointer(hTempFile, 0, 0, FILE_BEGIN);
+				if (!WriteFile(hTempFile, msg, 10, &res, NULL))
+					std::cout << "ERROR: " << GetLastError() << '\n';
+				sprintf_s(szContentLength, MAX_ULONG_STR, "%lu", 10);
 				ADD_KNOWN_HEADER(
 					response,
 					HttpHeaderContentLength,
@@ -406,14 +390,14 @@ DWORD SendHttpPostResponse(
 				//
 				// Send entity body from a file handle.
 				//
-				dataChunk.DataChunkType =
-					HttpDataChunkFromFileHandle;
-
-				dataChunk.FromFileHandle.
-					ByteRange.StartingOffset.QuadPart = 0;
-
+				/* dataChunk.DataChunkType = HttpDataChunkFromFileHandle;
+				dataChunk.FromFileHandle.ByteRange.StartingOffset.QuadPart = 0;
 				dataChunk.FromFileHandle.ByteRange.Length.QuadPart = HTTP_BYTE_RANGE_TO_EOF;
-				dataChunk.FromFileHandle.FileHandle = hTempFile;
+				dataChunk.FromFileHandle.FileHandle = hTempFile; */
+
+				dataChunk.DataChunkType = HttpDataChunkFromMemory;
+				dataChunk.FromMemory.pBuffer = msg;
+				dataChunk.FromMemory.BufferLength = 13;
 
 				result = HttpSendResponseEntityBody(
 					hReqQueue,
@@ -489,3 +473,20 @@ Done:
 
 	return result;
 }
+
+void INITIALIZE_HTTP_RESPONSE(HTTP_RESPONSE* resp, USHORT status, const char* reason) {
+	RtlZeroMemory(resp, sizeof(HTTP_RESPONSE));
+	resp->StatusCode = status;
+	resp->pReason = reason;
+	resp->ReasonLength = static_cast<USHORT>(strlen(reason));
+}
+
+void ADD_KNOWN_HEADER(HTTP_RESPONSE& Response, int HeaderId, const char* RawValue) {
+	(Response).Headers.KnownHeaders[HeaderId].pRawValue = RawValue;
+	(Response).Headers.KnownHeaders[HeaderId].RawValueLength = static_cast<USHORT>(strlen(RawValue));
+}
+
+void* ALLOC_MEM(std::size_t size) { return HeapAlloc(GetProcessHeap(), 0, size); }
+
+void FREE_MEM(void* ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
+

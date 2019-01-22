@@ -99,8 +99,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 
 	struct TaskQueue {
 		Action::TYPE type;
-		Task<unsigned char*>& task;
-		TaskQueue(const Action& action, Task<unsigned char*>& task) : type{ action.type }, task{ task } {}
+		std::unique_ptr<Task<unsigned char*>> task;
+		TaskQueue(const Action& action, std::unique_ptr<Task<unsigned char*>>task) : type{ action.type }, task { std::move(task) } {}
 	};
 	std::vector<Address> addresses;
 	addresses.push_back(Address(L"Jörgen", 1, 1));
@@ -116,9 +116,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	bool run = true;
 	while (run) {
 		if (pos < actions.size()) {
-			Task<unsigned char*>::STATUS_CODE sc = actions[pos].task.getState();
+			Task<unsigned char*>::STATUS_CODE sc = actions[pos].task->getState();
 			if (sc == Task<unsigned char*>::SUCCESS) {
-				actions[pos].~TaskQueue();
+				actions.erase(actions.begin() + pos);
 				memset(&actions[pos], 0, sizeof(TaskQueue));
 				++pos;
 			}
@@ -164,9 +164,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		case Action::SETCOLOR:
 			actions.push_back(TaskQueue(
 				std::move(action),
-				WriteTask<unsigned char*>(action.begin(), action.end())
+				std::make_unique<WriteTask<unsigned char*>>(action.begin(), action.end())
 			));
-			pipeServer.addTask(pipeId, actions.back().task);
+			pipeServer.addTask(pipeId, *actions.back().task);
 			break;
 		case Action::CLOSE:
 			run = false;

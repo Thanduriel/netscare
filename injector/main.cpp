@@ -4,6 +4,7 @@
 
 #include "../src/interface.hpp"
 #include "../src/PipeServer.hpp"
+#include "Network.hpp"
 #include "Gui.hpp"
 
 HWND hStart;		// handle to start button
@@ -76,7 +77,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	GetWindowThreadProcessId(hWnd, &processId);
 	HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, processId);
 	WriteTask<char*> wT(msg, msg + 16);
-	std::cout << "Hello: " << *msg << '\t' << *ms << '\n';
 	ReadTask<char*> rT(ms, 16);
 	pipeServer.addTask(pipeId, wT);
 	if (wT.getState(TRUE) == Task<char*>::FAILED) {
@@ -111,6 +111,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	unsigned char _msg[] = {255, 255, 0, 255};
 
 	std::vector<ScareEventCp> events;
+	wchar_t *username = nullptr;
+
+	Client client{};
+
 	Gui gui(hInst, addresses);
 
 	bool run = true;
@@ -126,13 +130,24 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		}
 		Action action = gui.update();
 		switch (action.type) {
+		case Action::LOGIN: {
+			if (client.isOnline()) break;
+			const wchar_t *uName = reinterpret_cast<const wchar_t*>(action.data);
+			if (username) delete[] username;
+			username = new wchar_t[wcslen(uName) + 1];
+			wcscpy(username, uName);
+			if (!client.Login(username)) { delete[] username; username = nullptr; }
+			else gui.SetUserName(username);
+			break;
+		}
 		case Action::EV_SETUP: {
 			ScareEvent * scareEv = reinterpret_cast<ScareEvent*>(action.data);
 			/* MessageBox(NULL,
 				(std::to_string(scareEv->target) + "  " + scareEv->file).c_str(),
 				"SetUpEvent", MB_OK); */
 			events.emplace_back( scareEv );
-			events.back().changeState(ScareEvent::SETTET);
+			client.SendPicture(events.back());
+			// events.back().changeState(ScareEvent::SETTET);
 			// check if data already exiist 
 			// check if user has data or is already pending
 			// delete action.data; ?? dont work

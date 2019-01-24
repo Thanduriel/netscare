@@ -4,7 +4,7 @@ Tickets::Tickets(int aproxUsers) : _data{ new std::uint8_t[aproxUsers * aproxUse
 	memset(_data, 0, aproxUsers * aproxUsers * sizeof(std::uint8_t));
 }
 Tickets::~Tickets() { delete[] _data; }
-void Tickets::realloc(int size) {
+void Tickets::Realloc(int size) {
 	if (size <= _capacity) return;
 	std::uint8_t *nData = new std::uint8_t[size * size];
 	memcpy(nData, _data, _capacity * _capacity * sizeof(std::uint8_t));
@@ -14,17 +14,17 @@ void Tickets::realloc(int size) {
 	_data = nData;
 	_capacity = size;
 }
-void Tickets::addUser() {
-		if (++_amtUser > _capacity) realloc(static_cast<int>(_capacity * 1.5f));
+void Tickets::AddUser() {
+		if (++_amtUser > _capacity) Realloc(static_cast<int>(_capacity * 1.5f));
 	}
-const std::uint8_t* Tickets::getTickets(std::uint8_t userId) const {
+const std::uint8_t* Tickets::GetTickets(std::uint8_t userId) const {
 	return _data + _capacity * userId;
 }
-std::uint8_t Tickets::getTicket(std::uint8_t userId, std::uint8_t targetId) const {
+std::uint8_t Tickets::GetTicket(std::uint8_t userId, std::uint8_t targetId) const {
 	return _data[userId * _capacity + targetId];
 }
 
-Tickets::TRASNACTION Tickets::transaction(std::uint8_t u1, std::uint8_t u2, const std::uint8_t* user, const std::uint8_t* amount, size_t amt) {
+Tickets::TRASNACTION Tickets::Transaction(std::uint8_t u1, std::uint8_t u2, const std::uint8_t* user, const std::uint8_t* amount, size_t amt) {
 	TRASNACTION res = SUUCCESS;
 	std::uint8_t *user1 = _data + u1 * _capacity;
 	std::uint8_t *user2 = _data + u2 * _capacity;
@@ -46,11 +46,15 @@ Tickets::TRASNACTION Tickets::transaction(std::uint8_t u1, std::uint8_t u2, cons
 	return res;
 }
 
-User::User(wchar_t *name) : id{ static_cast<std::uint8_t>(num++) }, name{ name }, events{}, states{}, ecexuted{ 0 } {
-		if (num > 255) MessageBoxA(NULL, "To many User\n", "memeory Error", MB_OK | MB_ICONERROR);
-	}
-const std::wstring& User::getName() const { return name; }
-void User::addEvent(std::uint8_t target, std::uint8_t picId, std::uint8_t id, bool picLoaded) {
+User::User(const wchar_t *name) : id{ static_cast<std::uint8_t>(num++) }, name{ name }, events{}, states{}, ecexuted{ 0 } {
+	if (num > 255) MessageBoxA(NULL, "To many User\n", "memeory Error", MB_OK | MB_ICONERROR);
+}
+User::User(const char *name) : id{ static_cast<std::uint8_t>(num++) }, events{}, states{}, ecexuted{ 0 }, name{name, name + strlen(name) + 1} {
+	if (num > 255) MessageBoxA(NULL, "To many User\n", "memeory Error", MB_OK | MB_ICONERROR);
+}
+
+const std::wstring& User::GetName() const { return name; }
+void User::AddEvent(std::uint8_t target, std::uint8_t picId, std::uint8_t id, bool picLoaded) {
 	if (id > events.size()) {
 		events.resize(id);
 		states.resize(id);
@@ -58,13 +62,13 @@ void User::addEvent(std::uint8_t target, std::uint8_t picId, std::uint8_t id, bo
 	events[id] = Event(target, picId);
 	states[id] = picLoaded ? Event::STATE::PIC_LOADED : Event::STATE::SETTED;
 }
-void User::updatePic(std::uint8_t picId) {
+void User::UpdatePic(std::uint8_t picId) {
 		for (std::size_t i = 0; i < events.size(); ++i) {
 			if (states[i] != Event::STATE::PREPARED) continue;
 			if (events[i].picId == picId) states[i] = Event::STATE::PIC_LOADED;
 		}
 	}
-void User::loadPic(std::uint8_t picId) {
+void User::LoadPic(std::uint8_t picId) {
 	for (std::size_t i = 0; i < events.size(); ++i) {
 		if (states[i] != Event::STATE::SETTED) continue;
 		if (events[i].picId == picId) states[i] = Event::STATE::PIC_LOADED;

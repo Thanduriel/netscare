@@ -20,11 +20,14 @@
 #include <cstdlib>
 #include <iostream>
 #include <vector>
+#include <fstream>
+#include <filesystem>
 
 #pragma comment(lib, "httpapi.lib")
 
 #include "Asn.hpp"
 #include "Types.hpp"
+#include "Messages.hpp"
 
 class NetScareServer {
 public:
@@ -34,6 +37,7 @@ public:
 		char *data;
 	};
 private:
+	enum RESPONDERRORS { SUCCEESS,  INVALID_DATA, INTERNAL_ERROR };
 	int urlC;
 	wchar_t **urls;
 	int urlAdded;
@@ -59,12 +63,15 @@ private:
 		HANDLE        hReqQueue,
 		PHTTP_REQUEST pRequest
 	);
-	std::vector<User>& users;
+	std::vector<User>& _users;
+	RESPONDERRORS CalculationRespond(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
+	RESPONDERRORS LoginResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
+	RESPONDERRORS LoadPictureResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
 public:
 	NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users);
 	~NetScareServer();
 	ULONG GetLastRedCode() { return redCode; }
-	ULONG updateServer(Action& action, BOOL wait = FALSE);
+	ULONG UpdateServer(OUT Action& action, BOOL wait = FALSE);
 };
 
 void INITIALIZE_HTTP_RESPONSE(HTTP_RESPONSE* resp, USHORT status, const char* reason);
@@ -74,3 +81,16 @@ void ADD_KNOWN_HEADER(HTTP_RESPONSE& Response, int HeaderId, const char* RawValu
 void* ALLOC_MEM(std::size_t size);
 
 void FREE_MEM(void* ptr);
+
+constexpr static unsigned long myStrLen(const char* str) {
+	unsigned long l = 0;
+	while (*(++str) != 0) ++l;
+	return l;
+}
+
+
+constexpr const char* MSG_USEREXIST = "Username already taken!";
+constexpr const char* MSG_NOTIMPLEMENTED = "Function ont Avalible now!";
+constexpr const char* MSG_INVALIDDATA = "Requets is not well fromed!";
+constexpr const char* MSG_INTERNELERROR = "Server Error, sporry";
+// constexpr const unsigned char *ASN_FAILED = ASNObject::EncodeAsnPrimitives("failed");

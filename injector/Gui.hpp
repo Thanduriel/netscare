@@ -13,15 +13,16 @@ struct Address {
 	Address(std::wstring&& name, int userId, int tickets) : name{ name }, userId{ userId }, tickets{ tickets } {}
 };
 
-constexpr int WM_SETCOLOR = WM_USER + 1; // wParam = rgba8
+constexpr int MAX_USERNAMELENGTH = 32;
+
 constexpr int WM_DESTROYCHILD = WM_USER + 2; // child has been detsroyd, lParam = ChlidHandle
 constexpr int WM_NOTIFICATIONCALLBACK = WM_USER + 3;
 constexpr int WM_SETUPEVENT = WM_USER + 4; // lParam *ScareEvent
 constexpr int WM_UPDATEVENT = WM_USER + 5; // wParam int eventId
 constexpr int WM_TRIGGEREVENT = WM_USER + 6; // wParam int event_id
 constexpr int WM_REFRESH = WM_USER + 7;
+constexpr int WM_LOGIN = WM_USER + 8; // lParam const wchar_t ptr
 
-constexpr int COM_SETCOLOR = 1;
 constexpr int COM_ADDQUEUE = 2;
 constexpr int COM_CLOSE = 3;
 constexpr int COM_ADDEVENT = 4;
@@ -31,6 +32,7 @@ constexpr int COM_SHOW = 7;
 constexpr int COM_READKEY = 8;
 constexpr int COM_EXECUTE_EVENT = 9;
 constexpr int COM_SELECTITEM = 10; // lParam = item id;
+constexpr int COM_LOGIN = 11;
 
 struct Dim {
 	constexpr Dim(int x, int y, int width, int height) : x{ x }, y{ y }, width{ width }, height{ height }, boundW{ x + width }, boundH{y + height} {}
@@ -70,7 +72,8 @@ struct AddressBookState {
 };
 
 struct MainWinState {
-	HWND hColorE{ 0 }, hQueueBox{ 0 }, hMain;
+	HWND hUsername{ 0 }, hQueueBox{ 0 }, hMain, hLoginButton{ 0 };
+	wchar_t username[MAX_USERNAMELENGTH];
 	HMENU nifMenu;
 	MainWinState(std::vector<Address>& adrs, std::vector<int>& res) : addresses{ adrs }, reservt{ res } {}
 	std::vector<Address>& addresses;
@@ -176,8 +179,9 @@ struct EventWinState : public ScareEvent {
 // setup Event data = PtrScareEvent
 // cancle Event data = int<id>
 // trigger Event data = int<id>
+// login data = wchar<username>
 struct Action {
-	enum TYPE { EV_SETUP, EV_TRIGGER, EV_UPADTE, SETCOLOR, CLOSE, NOTHING } type;
+	enum TYPE { EV_SETUP, EV_TRIGGER, EV_UPADTE, SETCOLOR, CLOSE, NOTHING, LOGIN } type;
 	unsigned char *data;
 	const std::size_t size;
 	bool clear{ true };
@@ -204,6 +208,7 @@ public:
 		DestroyCursor(_hCurser);
 	}
 	const Action update();
+	void SetUserName(const wchar_t* username);
 };
 
 constexpr wchar_t applicationName[] = L"NetScare";

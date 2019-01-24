@@ -1,8 +1,10 @@
 #include "Network.hpp"
 
+namespace fs = std::filesystem;
+
 int User::num = 0;
 
-NetScareServer::NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{ 0 }, users{ users } {
+NetScareServer::NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{ 0 }, _users{ users } {
 	ULONG retCode;
 	HTTPAPI_VERSION httpApiVersion = HTTPAPI_VERSION_1;
 	DWORD a = 0;
@@ -51,7 +53,7 @@ NetScareServer::~NetScareServer() {
 	HTTP_SET_NULL_ID(&requestId);
 }
 
-DWORD NetScareServer::updateServer(Action& action, BOOL wait) {
+DWORD NetScareServer::UpdateServer(Action& action, BOOL wait) {
 	ULONG              result;
 	DWORD a = 0;
 	action.type = Action::NOT_SET;
@@ -214,6 +216,78 @@ DWORD NetScareServer::SendHttpResponse(
 	return result;
 }
 
+NetScareServer::RESPONDERRORS NetScareServer::CalculationRespond(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len) {
+	if (asn.len != 3 
+		|| asn.objects[1].GetType() != ASNObject::INTEGER
+		|| asn.objects[2].GetType() != ASNObject::INTEGER) return RESPONDERRORS::INVALID_DATA;
+	u_char x = static_cast<std::uint8_t>(asn.objects[1].DecodeInteger());
+	u_char y = static_cast<std::uint8_t>(asn.objects[2].DecodeInteger());
+	msg = new unsigned char[9]{ u_char(0x13), u_char(0x04), 'r', 'e', 's', u_char(0), u_char(0x02), u_char(0x01), u_char(x + y) };
+	len = 9;
+	return RESPONDERRORS::SUCCEESS;
+}
+
+NetScareServer::RESPONDERRORS NetScareServer::LoginResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len) {
+	if (asn.len != 2
+		|| asn.objects[1].GetType() != ASNObject::UTF8String) return RESPONDERRORS::INVALID_DATA;
+	const wchar_t* name = asn.objects[1].DecodeUTF8();
+	bool doublicate = false;
+	for (const User& u : _users) {
+		if (wcscmp(asn.objects[1].DecodeUTF8(), u.GetName().c_str()) == 0) {
+			doublicate = true;
+			break;
+		}
+	}
+	if (doublicate) {
+		unsigned long decode[] = {
+			ASNObject::EncodingSize(NM_FAILED),
+			ASNObject::EncodingSize(MSG_USEREXIST)
+		};
+		len = decode[0] + decode[1];
+		msg = new unsigned char[len];
+		ASNObject::EncodeAsnPrimitives(NM_FAILED, msg);
+		ASNObject::EncodeAsnPrimitives(MSG_USEREXIST, msg + decode[0]);
+	}
+	else {
+		_users.push_back(User(asn.objects[1].DecodeUTF8()));
+		std::wcout << L"AddedUser: " << _users.back().GetName().c_str() << '\n';
+		unsigned long decode[] = {
+			ASNObject::EncodingSize(NM_SUCCESS),
+			ASNObject::EncodingSize(_users.back().id)
+		};
+		len = decode[0] + decode[1];
+		msg = new unsigned char[len];
+		ASNObject::EncodeAsnPrimitives(NM_SUCCESS, msg);
+		ASNObject::EncodeAsnPrimitives(_users.back().id, msg + decode[0]);
+	}
+	return RESPONDERRORS::SUCCEESS;
+}
+
+NetScareServer::RESPONDERRORS NetScareServer::LoadPictureResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len) {
+	if (asn.len != 4
+		|| asn.objects[1].GetType() != ASNObject::INTEGER
+		|| asn.objects[2].GetType() != ASNObject::INTEGER
+		|| asn.objects[3].GetType() != ASNObject::OCTASTRING) return RESPONDERRORS::INVALID_DATA;
+	int userId = asn.objects[1].DecodeInteger();
+	int picId = asn.objects[2].DecodeInteger();
+	std::string filename(std::to_string(userId) + '_' + std::to_string(picId) + ".jpg");
+	std::cout << "Start load Pictzure: uID: " << userId << "  picId: " << picId << "  filename: " << filename << '\n';
+	std::ofstream file(filename, std::ios::binary);
+	if (file.fail()) { std::cout << "cant open file\n"; return RESPONDERRORS::INTERNAL_ERROR; }
+	file.write(reinterpret_cast<const char*>(asn.objects[3].GetRaw()), asn.objects[3].GetSize());
+	if (file.fail()) { std::cout << "cant write file\n"; return RESPONDERRORS::INTERNAL_ERROR; }
+	file.close();
+
+	int decode[] = {
+		ASNObject::EncodingSize(NM_SUCCESS)
+	};
+	len = decode[0];
+	msg = new unsigned char[len];
+	ASNObject::EncodeAsnPrimitives(NM_SUCCESS, msg);
+
+	return RESPONDERRORS::SUCCEESS;
+}
+
 DWORD NetScareServer::SendHttpPostResponse(
 	Action &action,
 	HANDLE        hReqQueue,
@@ -226,21 +300,15 @@ DWORD NetScareServer::SendHttpPostResponse(
 	PUCHAR          pEntityBuffer;
 	ULONG           EntityBufferLength;
 	ULONG           BytesRead;
-	ULONG           TempFileBytesWritten;
-	HANDLE          hTempFile;
-	TCHAR           szTempName[MAX_PATH + 1];
 	CHAR            szContentLength[MAX_ULONG_STR];
 	HTTP_DATA_CHUNK dataChunk;
 	ULONG           TotalBytesRead = 0;
 
 	BytesRead = 0;
-	hTempFile = INVALID_HANDLE_VALUE;
 
-	//
-	// Allocate space for an entity buffer. Buffer can be increased 
-	// on demand.
-	//
-	EntityBufferLength = 2048;
+	std::cout << "Start Read POts Requets\n";
+
+	EntityBufferLength = 1024 * 2048;
 	pEntityBuffer = reinterpret_cast<PUCHAR>(ALLOC_MEM(EntityBufferLength));
 
 	if (pEntityBuffer == NULL)
@@ -256,41 +324,7 @@ DWORD NetScareServer::SendHttpPostResponse(
 	INITIALIZE_HTTP_RESPONSE(&response, 200, "OK");
 	if (pRequest->Flags & HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS)
 	{
-		// The entity body is sent over multiple calls. Collect 
-		// these in a file and send back. Create a temporary 
-		// file.
-		//
-
-		if (GetTempFileName(
-			L".",
-			L"New",
-			0,
-			szTempName
-		) == 0)
-		{
-			result = GetLastError();
-			wprintf(L"GetTempFileName failed with %lu \n", result);
-			goto Done;
-		}
-
-		hTempFile = CreateFile(
-			szTempName,
-			GENERIC_READ | GENERIC_WRITE,
-			0,                  // Do not share.
-			NULL,               // No security descriptor.
-			CREATE_ALWAYS,      // Overrwrite existing.
-			FILE_ATTRIBUTE_NORMAL,    // Normal file.
-			NULL
-		);
-
-		if (hTempFile == INVALID_HANDLE_VALUE)
-		{
-			result = GetLastError();
-			wprintf(L"Cannot create temporary file. Error %lu \n",
-				result);
-			goto Done;
-		}
-
+		std::vector<unsigned char> input;
 		do
 		{
 			//
@@ -314,13 +348,7 @@ DWORD NetScareServer::SendHttpPostResponse(
 				if (BytesRead != 0)
 				{
 					TotalBytesRead += BytesRead;
-					WriteFile(
-						hTempFile,
-						pEntityBuffer,
-						BytesRead,
-						&TempFileBytesWritten,
-						NULL
-					);
+					input.insert(input.end(), pEntityBuffer, pEntityBuffer + BytesRead);
 				}
 				break;
 
@@ -328,36 +356,46 @@ DWORD NetScareServer::SendHttpPostResponse(
 				if (BytesRead != 0)
 				{
 					TotalBytesRead += BytesRead;
-					WriteFile(
-						hTempFile,
-						pEntityBuffer,
-						BytesRead,
-						&TempFileBytesWritten,
-						NULL
-					);
+					input.insert(input.end(), pEntityBuffer, pEntityBuffer + BytesRead);
 				}
-				unsigned char * data = new unsigned char[TotalBytesRead];
-				DWORD res = 0;
+				ASNObject::ASNDecodeReturn asn = ASNObject::DecodeAsn(input.data(), TotalBytesRead);
+				
+				unsigned char *msg = nullptr;
+				unsigned long len = 0;
 
-				if (SetFilePointer(hTempFile, 0, 0, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
-					wprintf(L"ERROR: %ud", GetLastError());
-
-
-
-				ReadFile(hTempFile, data, TotalBytesRead, &res, NULL);
-				ASNObject *asn = ASNObject::DecodeAsn(data, TotalBytesRead);
-				std::uint8_t x, y;
-				if (asn->GetType() == ASNObject::ASCISTRING) {
+				RESPONDERRORS resultState = RESPONDERRORS::INVALID_DATA;
+				if (asn.objects[0].GetType() == ASNObject::ASCISTRING) {
 					if (strcmp(asn[0].DecodeString(), "calc") == 0) {
-						x = static_cast<std::uint8_t>(asn[1].DecodeInteger());
-						y = static_cast<std::uint8_t>(asn[2].DecodeInteger());
-					} else std::cout << "No calc operation: " << asn->DecodeString() << '\n';
-				} else std::cout << "No String Type: " << asn->GetType() << '\n';
-				char msg[] = {0x13, 0x04, 'r', 'e', 's', 0, 0x02, 0x01, x + y};
-				SetFilePointer(hTempFile, 0, 0, FILE_BEGIN);
-				if (!WriteFile(hTempFile, msg, 10, &res, NULL))
-					std::cout << "ERROR: " << GetLastError() << '\n';
-				sprintf_s(szContentLength, MAX_ULONG_STR, "%lu", 10);
+						resultState = CalculationRespond(asn, msg, len);
+					} else if (strcmp(asn[0].DecodeString(), NM_LOGIN) == 0) {
+						resultState = LoginResponde(asn, msg, len);
+					} else if(strcmp(asn[0].DecodeString(), NM_LOADPIC) == 0) {
+						resultState = LoadPictureResponde(asn, msg, len);
+					} else std::cout << "No valid operation: " << asn.objects[0].DecodeString() << '\n';
+				} else std::cout << "Cant resolve Requets No String Type: " << asn.objects[0].GetType() << '\n';
+
+				if (resultState == RESPONDERRORS::INVALID_DATA || resultState == RESPONDERRORS::INTERNAL_ERROR) {
+					if (msg) delete[] msg;
+					unsigned long decode[] = {
+						ASNObject::EncodingSize(NM_FAILED),
+						0
+					};
+					switch (resultState) {
+					case RESPONDERRORS::INVALID_DATA: decode[1] = ASNObject::EncodingSize(MSG_INVALIDDATA); break;
+					case RESPONDERRORS::INTERNAL_ERROR: decode[1] = ASNObject::EncodingSize(MSG_INTERNELERROR); break;
+					}
+					len = decode[0] + decode[1];
+					msg = new unsigned char[len];
+					ASNObject::EncodeAsnPrimitives(NM_FAILED, msg);
+					switch (resultState) {
+					case RESPONDERRORS::INVALID_DATA: ASNObject::EncodeAsnPrimitives(MSG_INVALIDDATA, msg + decode[0]); break;
+					case RESPONDERRORS::INTERNAL_ERROR: ASNObject::EncodeAsnPrimitives(MSG_INTERNELERROR, msg + decode[0]); break;
+					}
+					
+				}
+
+				sprintf_s(szContentLength, MAX_ULONG_STR, "%lu", len);
+
 				ADD_KNOWN_HEADER(
 					response,
 					HttpHeaderContentLength,
@@ -386,10 +424,6 @@ DWORD NetScareServer::SendHttpPostResponse(
 					);
 					goto Done;
 				}
-
-				//
-				// Send entity body from a file handle.
-				//
 				/* dataChunk.DataChunkType = HttpDataChunkFromFileHandle;
 				dataChunk.FromFileHandle.ByteRange.StartingOffset.QuadPart = 0;
 				dataChunk.FromFileHandle.ByteRange.Length.QuadPart = HTTP_BYTE_RANGE_TO_EOF;
@@ -397,7 +431,7 @@ DWORD NetScareServer::SendHttpPostResponse(
 
 				dataChunk.DataChunkType = HttpDataChunkFromMemory;
 				dataChunk.FromMemory.pBuffer = msg;
-				dataChunk.FromMemory.BufferLength = 13;
+				dataChunk.FromMemory.BufferLength = len;
 
 				result = HttpSendResponseEntityBody(
 					hReqQueue,
@@ -436,9 +470,6 @@ DWORD NetScareServer::SendHttpPostResponse(
 	}
 	else
 	{
-		// This request does not have an entity body.
-		//
-
 		result = HttpSendHttpResponse(
 			hReqQueue,           // ReqQueueHandle
 			pRequest->RequestId, // Request ID
@@ -460,17 +491,7 @@ DWORD NetScareServer::SendHttpPostResponse(
 
 Done:
 
-	if (pEntityBuffer)
-	{
-		FREE_MEM(pEntityBuffer);
-	}
-
-	if (INVALID_HANDLE_VALUE != hTempFile)
-	{
-		CloseHandle(hTempFile);
-		DeleteFile(szTempName);
-	}
-
+	if (pEntityBuffer) FREE_MEM(pEntityBuffer);
 	return result;
 }
 
@@ -490,3 +511,41 @@ void* ALLOC_MEM(std::size_t size) { return HeapAlloc(GetProcessHeap(), 0, size);
 
 void FREE_MEM(void* ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 
+bool CmpAddress(PSOCKADDR addr1, PSOCKADDR addr2) {
+	if (addr1->sa_family != addr2->sa_family) return false;
+	if (addr1->sa_family == AF_INET6) {
+		for (int i = 0; i < 8; ++i)
+			if (reinterpret_cast<PSOCKADDR_IN6>(addr1)->sin6_addr.u.Word[i]
+				!= reinterpret_cast<PSOCKADDR_IN6>(addr2)->sin6_addr.u.Word[i])
+				return false;
+		return true;
+	}
+	if (addr1->sa_family == AF_INET) {
+		return reinterpret_cast<PSOCKADDR_IN>(addr1)->sin_addr.S_un.S_addr
+			== reinterpret_cast<PSOCKADDR_IN>(addr2)->sin_addr.S_un.S_addr;
+	}
+	return false;
+}
+
+void PrintAddress(PSOCKADDR address) {
+	if (address->sa_family == AF_INET6) {
+		std::cout << "IPv6: " << std::hex;
+		for (int i = 0; i < 8; ++i) {
+			std::cout << reinterpret_cast<PSOCKADDR_IN6>(address)->sin6_addr.u.Word[i];
+			if (i != 7) std::cout << ':';
+		}
+		std::cout << std::dec << '\n';
+	}
+	else if (address->sa_family == AF_INET) {
+		std::cout << "IPv4: ";
+		unsigned char* addr = reinterpret_cast<unsigned char*>(&reinterpret_cast<PSOCKADDR_IN>(address)->sin_addr.S_un);
+		for (int i = 0; i < 4; ++i) {
+			std::cout << addr[i];
+			if (i != 7) std::cout << '.';
+		}
+		std::cout << '\n';
+	}
+	else {
+		std::cout << "Cant pasre address\n";
+	}
+}

@@ -27,7 +27,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
 	NetScareServer::Action action;
 	do {
 		Sleep(100);
-		server.updateServer(action);
+		server.UpdateServer(action);
 		switch (action.type) {
 		case NetScareServer::Action::USER_NEW:
 			users.push_back(User(reinterpret_cast<wchar_t*>(action.data)));
@@ -43,16 +43,16 @@ int __cdecl wmain(int argc, wchar_t **argv) {
 			file.write(action.data + 2 + sizeof(std::size_t), len);
 			file.close();
 			if (!picUpdate) {
-				users[user].loadPic(pId);
+				users[user].LoadPic(pId);
 			} else {
-				users[user].updatePic(pId);
+				users[user].UpdatePic(pId);
 			}
 			delete[] action.data;
 		}	break;
 		case NetScareServer::Action::EVENT_ADD: {
 			char name[25];
 			sprintf_s(name, "%d_%d.dds", action.data[0], action.data[1]);
-			users[action.data[0]].addEvent(action.data[0], action.data[1], *reinterpret_cast<std::uint8_t*>(action.data + 2), _access(name, 0));
+			users[action.data[0]].AddEvent(action.data[0], action.data[1], *reinterpret_cast<std::uint8_t*>(action.data + 2), _access(name, 0));
 			delete[] action.data;
 		}	break;
 		}

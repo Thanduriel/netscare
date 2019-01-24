@@ -12,6 +12,11 @@ file(GLOB SERVER_FILES
     "server/*.cpp"
 )
 
+file(GLOB INJECTOR_FILES
+	"injector/*.hpp"
+	"injector/*.cpp"
+)
+
 include(FindDirectX.cmake)
 
 add_compile_options("/I%(WindowsSDK_IncludePath)")
@@ -37,7 +42,7 @@ add_executable(server ${SERVER_FILES})
 
 add_executable(testClient testClient/main.cpp server/Asn.hpp)
 
-add_executable(injector injector/main.cpp src/PipeServer.hpp src/PipeServer.cpp injector/Gui.cpp injector/Gui.hpp src/utils.cpp src/utils.hpp)
+add_executable(injector ${INJECTOR_FILES} src/PipeServer.hpp src/PipeServer.cpp src/utils.cpp src/utils.hpp server/Messages.hpp)
 target_link_libraries(injector netscare)
 set_property(TARGET injector PROPERTY WIN32_EXECUTABLE true)
 

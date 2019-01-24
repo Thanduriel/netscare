@@ -139,15 +139,17 @@ const Action Gui::update() {
 			unsigned char *wp = new unsigned char[sizeof(int)];
 			*reinterpret_cast<int*>(wp) = winMsg.wParam;
 			return Action(Action::EV_UPADTE, sizeof(int), wp);
+			// return Action(Action::EV_SETUP, sizeof(ScareEvent*), reinterpret_cast<unsigned char*>(winMsg.lParam), false);
 		}	break;
 		case WM_TRIGGEREVENT: {
 			unsigned char *wp = new unsigned char[sizeof(int)];
 			*reinterpret_cast<int*>(wp) = winMsg.wParam;
 			return Action(Action::EV_TRIGGER, sizeof(int), wp);
 		} break;
-		case WM_SETCOLOR: {
-			*reinterpret_cast<WPARAM*>(bgColor) = winMsg.wParam;
-			return Action(Action::SETCOLOR, 4, bgColor, false);
+		case WM_LOGIN: {
+			return Action(Action::LOGIN, 
+				wcslen(reinterpret_cast<wchar_t*>(winMsg.lParam)) + 1,
+				reinterpret_cast<unsigned char*>(winMsg.lParam), false);
 		}
 		break;
 		default:
@@ -157,6 +159,13 @@ const Action Gui::update() {
 	} else {
 		return Action(Action::CLOSE);
 	}
+}
+
+void Gui::SetUserName(const wchar_t* username) {
+	MainWinState *pState = reinterpret_cast<MainWinState*>(GetWindowLongPtrW(_hInput, GWLP_USERDATA));
+	SetWindowTextW(pState->hUsername, username);
+	EnableWindow(pState->hLoginButton, FALSE);
+	EnableWindow(pState->hUsername, FALSE);
 }
 
 void addUI(HWND hWnd, AddressBookState *pState) {
@@ -184,9 +193,9 @@ void addUI(HWND hWnd, AddressBookState *pState) {
 }
 
 void addUI(HWND hWnd, MainWinState* pState) {
-	CreateWindowW(L"static", L"Color(r,g,b): ", WS_VISIBLE | WS_CHILD, 10, 10, 100, 20, hWnd, NULL, NULL, NULL);
-	pState->hColorE = CreateWindowW(L"edit", L"255,255,255", WS_VISIBLE | WS_CHILD, 110, 10, 100, 20, hWnd, NULL, NULL, NULL);
-	CreateWindowW(L"button", L"set bg color", WS_VISIBLE | WS_CHILD, 10, 60, 100, 20, hWnd, (HMENU)COM_SETCOLOR, NULL, NULL);
+	CreateWindowW(L"static", L"Username: ", WS_VISIBLE | WS_CHILD, 10, 10, 100, 20, hWnd, NULL, NULL, NULL);
+	pState->hUsername = CreateWindowW(L"edit", L"<->", WS_VISIBLE | WS_CHILD, 110, 10, 100, 20, hWnd, NULL, NULL, NULL);
+	pState->hLoginButton = CreateWindowW(L"button", L"Login", WS_VISIBLE | WS_CHILD, 10, 60, 100, 20, hWnd, (HMENU)COM_LOGIN, NULL, NULL);
 	CreateWindowW(L"button", L"AddQueue", WS_VISIBLE | WS_CHILD, 110, 60, 100, 20, hWnd, (HMENU)COM_ADDQUEUE, NULL, NULL);
 
 	QueueBoxState *qbs = new (std::nothrow) QueueBoxState{};
@@ -240,7 +249,7 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 	case WM_KEYDOWN:
 		switch (wParam) {
 		case VK_RETURN:
-			if (lParam == (LPARAM)pState->hColorE) com = COM_SETCOLOR;
+			if (lParam == (LPARAM)pState->hUsername) com = COM_LOGIN;
 			break;
 		}
 		break;
@@ -280,14 +289,11 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 	}
 
 	switch (com) {
-	case COM_SETCOLOR: {
-		wchar_t text[32];
-		GetWindowTextW(pState->hColorE, text, 32);
-		unsigned char rgba[4] = { 0, 0, 0, 0 };
-		rgba[3] = 255;
-		swscanf_s(text, L"%hhu, %hhu, %hhu", rgba, rgba + 1, rgba + 2);
-		PostMessageW(NULL, WM_SETCOLOR, *reinterpret_cast<WPARAM*>(rgba), NULL);
-	} break;
+	case COM_LOGIN: {
+		GetWindowTextW(pState->hUsername, pState->username, MAX_USERNAMELENGTH);
+		PostMessageW(NULL, WM_LOGIN, NULL, (LPARAM)pState->username);
+		break;
+	}
 	case COM_ADDQUEUE:
 		PostMessageW(pState->hQueueBox, WM_COMMAND, COM_ADDQUEUE, lParam);
 		break;

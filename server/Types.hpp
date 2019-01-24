@@ -52,9 +52,10 @@ public:
 	enum DECODERESULT { DECODED, CORRUPTED };
 	TYPE GetType() const { return _type; }
 	DECODERESULT GetState() const { return _decodeState; }
-	virtual unsigned long EncodeSize() = 0;			// return Space for Encoding
-	virtual void Encode(unsigned char* msg) = 0;	// encodes in space
+	virtual unsigned long EncodeSize() { return 0; };			// return Space for Encoding
+	virtual void Encode(unsigned char* msg) {};	// encodes in space
 	static std::unique_ptr<Command> Decode(ASNObject::ASNDecodeReturn& asn);
+	Command(TYPE type) : _type{ type }, _decodeState{ CORRUPTED } {}
 protected:
 	unsigned long _size{ 0 };
 	static constexpr char * const IDENTIFYER[] = {
@@ -63,7 +64,6 @@ protected:
 		"downloadPic"
 	};
 	DECODERESULT _decodeState;
-	Command(TYPE type) : _type{ type }, _decodeState{ CORRUPTED } {}
 private:
 	TYPE _type;
 	static constexpr unsigned long MAX_NAME{ 32 };
@@ -100,7 +100,9 @@ public:
 	LoadPictureCommand(const char* fileName) : Command{ DOWNLAOD_PIC }, _data { nullptr } {
 		strcpy_s(_fileName, fileName);
 		std::fstream file(fileName, std::ios::binary | std::ios::app);
-		_fileSize = file.tellg();
+		std::streamoff off = file.tellg();
+		if (off > ULONG_MAX) MessageBoxW(NULL, L"File To large", L"Handling Warning", MB_OK | MB_ICONWARNING);
+		_fileSize = static_cast<unsigned long>(off);
 		file.close();
 	}
 	unsigned long EncodeSize() override;

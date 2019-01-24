@@ -29,27 +29,13 @@ public:
 	const char* DecodeString() const;
 	const unsigned char* GetRaw() const;
 	bool DecodeBool() const;
-	constexpr static unsigned long EncodeHeaderSize(unsigned long dataSize);
-	constexpr static unsigned long GetSize(const unsigned char *data);
+	static unsigned long EncodeHeaderSize(unsigned long dataSize);
+	static unsigned long GetSize(const unsigned char *data);
 	unsigned long GetSize() const { return len + headerSize; }
 	unsigned long GetDataSize() const { return len; }
-	ASNObject(TYPE type, const unsigned char*const data, const unsigned long len) : type{ type }, data{ data }, len{ len }, headerSize{ 1 + EncodeLenSize(len)}, deep { 0 } {}
-	ASNObject() : type{ FAILED }, data{ nullptr }, len{ 0 }, deep{ 0 } {}
-	ASNObject(const unsigned char* data, std::uint8_t deep) : len{ 0 }, deep{ deep } {
-		context = CONTEXT(context >> 6);
-		type = TYPE(*data & 0x3F);
-		DecodeLen(data);
-		switch (type) {
-		case BOOLEAN: {
-			unsigned char x = *reinterpret_cast<const unsigned char*>(this->data) & 0xFF;
-			if (!(x == 0xFF || x == 0x00)) throw ASNERRORS(INVALIDDATA); break;
-		}	break;
-		case INTEGER: if (len > sizeof(long)) throw ASNERRORS(MAXINTEGERSIZE); break;
-		case SEQUENCE:
-			this->data = reinterpret_cast<unsigned char*>(DecodeAsn(this->data, len, deep + 1).objects);
-			break;
-		}
-	}
+	ASNObject(TYPE type, const unsigned char*const data, const unsigned long len);
+	ASNObject();
+	ASNObject(const unsigned char* data, std::uint8_t deep);
 	~ASNObject() {
 		if (type == SEQUENCE) delete[] reinterpret_cast<const ASNObject*>(data);
 	}

@@ -1,7 +1,23 @@
 #include "Asn.hpp"
 #include "Types.hpp"
 
-
+ASNObject::ASNObject(TYPE type, const unsigned char*const data, const unsigned long len) : type{ type }, data{ data }, len{ len }, headerSize{ 1 + EncodeLenSize(len) }, deep{ 0 } {}
+ASNObject::ASNObject() : type{ FAILED }, data{ nullptr }, len{ 0 }, deep{ 0 } {}
+ASNObject::ASNObject(const unsigned char* data, std::uint8_t deep) : len{ 0 }, deep{ deep } {
+	context = CONTEXT(context >> 6);
+	type = TYPE(*data & 0x3F);
+	DecodeLen(data);
+	switch (type) {
+	case BOOLEAN: {
+		unsigned char x = *reinterpret_cast<const unsigned char*>(this->data) & 0xFF;
+		if (!(x == 0xFF || x == 0x00)) throw ASNERRORS(INVALIDDATA); break;
+	}	break;
+	case INTEGER: if (len > sizeof(long)) throw ASNERRORS(MAXINTEGERSIZE); break;
+	case SEQUENCE:
+		this->data = reinterpret_cast<unsigned char*>(DecodeAsn(this->data, len, deep + 1).objects);
+		break;
+	}
+}
 void ASNObject::DecodeLen(const unsigned char* data) {
 	if (data[1] & 0x80) { // long encoding
 		unsigned char byteLen = data[1] & 0x7F;
@@ -68,10 +84,10 @@ bool ASNObject::DecodeBool() const {
 	if (type != TYPE::BOOLEAN) throw ASNERRORS(WRONGTYPE);
 	return !(*data == 0x00);
 }
-constexpr unsigned long ASNObject::EncodeHeaderSize(unsigned long dataSize) {
+unsigned long ASNObject::EncodeHeaderSize(unsigned long dataSize) {
 	return EncodeLenSize(dataSize) + 1;
 }
-constexpr unsigned long ASNObject::GetSize(const unsigned char *data) {
+unsigned long ASNObject::GetSize(const unsigned char *data) {
 	unsigned long res = 0;
 	if (data[1] & 0x80) {
 		unsigned char byteLen = data[1] & 0x7F;

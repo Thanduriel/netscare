@@ -1,5 +1,7 @@
 #include "Types.hpp"
 
+int User::num = 0;
+
 Tickets::Tickets(int aproxUsers) : _data{ new std::uint8_t[aproxUsers * aproxUsers] }, _amtUser{ 0 }, _capacity{ aproxUsers } {
 	memset(_data, 0, aproxUsers * aproxUsers * sizeof(std::uint8_t));
 }
@@ -98,6 +100,7 @@ unsigned long AddUserCommand::EncodeSize() {
 	if (_idSize && _size) return _size;
 	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	_size = _idSize + ASNObject::EncodingSize(_username) + _numSize;
+	return _size;
 }
 
 void AddUserCommand::Encode(unsigned char* msg) {
@@ -125,6 +128,7 @@ unsigned long LoadPictureCommand::EncodeSize() {
 	if (_idSize && _size) return _size;
 	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	_size = _idSize + _fileSize + ASNObject::EncodeHeaderSize(_fileSize);
+	return _size;
 }
 
 void LoadPictureCommand::Encode(unsigned char* msg) {

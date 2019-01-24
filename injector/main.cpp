@@ -4,6 +4,7 @@
 
 #include "../src/interface.hpp"
 #include "../src/PipeServer.hpp"
+#include "../server/Asn.hpp"
 #include "Network.hpp"
 #include "Gui.hpp"
 

@@ -2,8 +2,6 @@
 
 namespace fs = std::filesystem;
 
-int User::num = 0;
-
 NetScareServer::NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{ 0 }, _users{ users } {
 	ULONG retCode;
 	HTTPAPI_VERSION httpApiVersion = HTTPAPI_VERSION_1;

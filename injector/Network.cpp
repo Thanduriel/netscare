@@ -195,4 +195,5 @@ bool Client::Update() {
 	}
 
 	// TODO:: repond handling
+	return true;
 }

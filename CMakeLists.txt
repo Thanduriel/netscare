@@ -40,9 +40,7 @@ target_link_libraries(netscare directXTK)
 
 add_executable(server ${SERVER_FILES})
 
-add_executable(testClient testClient/main.cpp server/Asn.hpp server/Asn.hpp)
-
-add_executable(injector ${INJECTOR_FILES} src/PipeServer.hpp src/PipeServer.cpp src/utils.cpp src/utils.hpp server/Messages.hpp server/Asn.hpp server/Asn.cpp)
+add_executable(injector ${INJECTOR_FILES} src/PipeServer.hpp src/PipeServer.cpp src/utils.cpp src/utils.hpp server/Messages.hpp server/Types.hpp server/Types.cpp server/Asn.hpp server/Asn.cpp)
 target_link_libraries(injector netscare)
 set_property(TARGET injector PROPERTY WIN32_EXECUTABLE true)
 

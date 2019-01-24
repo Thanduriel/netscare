@@ -109,7 +109,7 @@ Gui::Gui(HINSTANCE hInst, std::vector<Address>& addresses) : addresses{addresses
 	note.uCallbackMessage = WM_NOTIFICATIONCALLBACK;
 	note.hIcon = _hIcon;
 	note.uID = NIF_ID;
-	wcscpy(note.szTip, applicationName);
+	wcscpy_s(note.szTip, applicationName);
 	note.dwState = NULL;
 	note.dwStateMask = NULL;
 	note.uVersion = NOTIFYICON_VERSION_4;

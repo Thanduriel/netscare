@@ -212,7 +212,7 @@ public:
 		else res = new unsigned char[len + header];
 		res[0] = 0x0c;
 		EncodeLen(len, res + 1);
-		wcscpy(reinterpret_cast<wchar_t*>(res + header), msg);
+		wcscpy_s(reinterpret_cast<wchar_t*>(res + header), len, msg);
 		return res;
 	}
 	static unsigned long EncodingSize(const char* msg) {
@@ -230,7 +230,7 @@ public:
 		}
 		res[0] = 0x13; // asci string byte 
 		EncodeLen(len, res + 1);
-		strcpy(reinterpret_cast<char*>(res + header), msg);
+		strcpy_s(reinterpret_cast<char*>(res + header), len, msg);
 		return res;
 	}
 };

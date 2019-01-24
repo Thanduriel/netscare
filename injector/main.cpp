@@ -134,8 +134,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 			if (client.isOnline()) break;
 			const wchar_t *uName = reinterpret_cast<const wchar_t*>(action.data);
 			if (username) delete[] username;
-			username = new wchar_t[wcslen(uName) + 1];
-			wcscpy(username, uName);
+			unsigned long len = wcslen(uName) + 1;
+			username = new wchar_t[len];
+			wcscpy_s(username, len, uName);
 			if (!client.Login(username)) { delete[] username; username = nullptr; }
 			else gui.SetUserName(username);
 			break;

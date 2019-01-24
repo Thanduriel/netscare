@@ -278,7 +278,7 @@ NetScareServer::RESPONDERRORS NetScareServer::LoadPictureResponde(const ASNObjec
 	if (file.fail()) { std::cout << "cant write file\n"; return RESPONDERRORS::INTERNAL_ERROR; }
 	file.close();
 
-	int decode[] = {
+	unsigned long decode[] = {
 		ASNObject::EncodingSize(NM_SUCCESS)
 	};
 	len = decode[0];

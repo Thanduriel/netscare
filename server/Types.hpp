@@ -1,6 +1,11 @@
+#pragma once
 #include <windows.h>
 #include <cstdint>
 #include <vector>
+#include <memory>
+#include <fstream>
+
+#include "Asn.hpp"
 
 struct Event {
 	std::uint8_t target, picId;
@@ -39,4 +44,65 @@ public:
 	void AddEvent(std::uint8_t target, std::uint8_t picId, std::uint8_t id, bool picLoaded);
 	void UpdatePic(std::uint8_t picId);
 	void LoadPic(std::uint8_t picId);
+};
+
+class Command {
+public:
+	enum TYPE { TRIGGEREVENT, ADD_USER, DOWNLAOD_PIC };
+	enum DECODERESULT { DECODED, CORRUPTED };
+	TYPE GetType() const { return _type; }
+	DECODERESULT GetState() const { return _decodeState; }
+	virtual unsigned long EncodeSize() = 0;			// return Space for Encoding
+	virtual void Encode(unsigned char* msg) = 0;	// encodes in space
+	static std::unique_ptr<Command> Decode(ASNObject::ASNDecodeReturn& asn);
+protected:
+	unsigned long _size{ 0 };
+	static constexpr char * const IDENTIFYER[] = {
+		"triggerEvent",
+		"addUser",
+		"downloadPic"
+	};
+	DECODERESULT _decodeState;
+	Command(TYPE type) : _type{ type }, _decodeState{ CORRUPTED } {}
+private:
+	TYPE _type;
+	static constexpr unsigned long MAX_NAME{ 32 };
+};
+
+class TriggerEventCommand : public Command {
+	int _eventId;
+	unsigned long _idSize{ 0 };
+public:
+	TriggerEventCommand(int eventId) : Command{ TRIGGEREVENT }, _eventId{ eventId } {}
+	unsigned long EncodeSize() override;
+	void Encode(unsigned char* msg) override;
+};
+
+class AddUserCommand : public Command {
+	std::uint8_t _id;
+	wchar_t _username[32];
+	unsigned long _idSize{ 0 };
+	static constexpr unsigned long _numSize{ 3 };
+public:
+	AddUserCommand(const wchar_t* username, std::uint8_t id) : Command{ ADD_USER }, _id{ id }{
+		wcscpy_s(_username, username);
+	}
+	unsigned long EncodeSize() override;
+	void Encode(unsigned char* msg) override;
+};
+
+class LoadPictureCommand : public Command {
+	char _fileName[32];
+	unsigned long _fileSize;
+	unsigned char* _data;
+	unsigned long _idSize{ 0 }, _size{ 0 };
+public:
+	LoadPictureCommand(const char* fileName) : Command{ DOWNLAOD_PIC }, _data { nullptr } {
+		strcpy_s(_fileName, fileName);
+		std::fstream file(fileName, std::ios::binary | std::ios::app);
+		_fileSize = file.tellg();
+		file.close();
+	}
+	unsigned long EncodeSize() override;
+	void Encode(unsigned char* msg) override;
 };

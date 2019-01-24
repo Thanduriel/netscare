@@ -74,3 +74,66 @@ void User::LoadPic(std::uint8_t picId) {
 		if (events[i].picId == picId) states[i] = Event::STATE::PIC_LOADED;
 	}
 }
+
+std::unique_ptr<Command> Command::Decode(ASNObject::ASNDecodeReturn& asn) {
+	if (asn.len < 1 || asn.objects[0].GetType() != ASNObject::ASCISTRING) return nullptr;
+	const char* type = asn.objects[0].DecodeString();
+	if (strcmp(type, Command::IDENTIFYER[ADD_USER])) {
+		if (asn.len != 3
+			|| asn.objects[1].GetType() != ASNObject::UTF8String
+			|| asn.objects[1].GetDataSize() / sizeof(wchar_t) > MAX_NAME
+			|| asn.objects[2].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(ADD_USER);
+		int id = asn.objects[2].DecodeInteger();
+		if (id > 255) return std::make_unique<Command>(ADD_USER);
+		return std::make_unique<AddUserCommand>(asn.objects[1].DecodeUTF8(), static_cast<std::uint8_t>(id));
+	} else if (strcmp(type, Command::IDENTIFYER[TRIGGEREVENT])){
+		if (asn.len != 2
+			|| asn.objects[1].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(TRIGGEREVENT);
+		return std::make_unique<TriggerEventCommand>(asn.objects[1].DecodeInteger());
+	}
+	return nullptr;
+}
+
+unsigned long AddUserCommand::EncodeSize() {
+	if (_idSize && _size) return _size;
+	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	_size = _idSize + ASNObject::EncodingSize(_username) + _numSize;
+}
+
+void AddUserCommand::Encode(unsigned char* msg) {
+	unsigned long offset = _idSize;
+	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
+	ASNObject::EncodeAsnPrimitives(_id, msg + offset);
+	offset += _numSize;
+	ASNObject::EncodeAsnPrimitives(_username, msg + offset);
+}
+
+unsigned long TriggerEventCommand::EncodeSize() {
+	if (_idSize && _size) return _size;
+	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	_size = _idSize + ASNObject::EncodingSize(_eventId);
+	return _size;
+}
+
+void TriggerEventCommand::Encode(unsigned char* msg) {
+	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
+	ASNObject::EncodeAsnPrimitives(_eventId, msg + offset);
+}
+
+unsigned long LoadPictureCommand::EncodeSize() {
+	if (_idSize && _size) return _size;
+	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	_size = _idSize + _fileSize + ASNObject::EncodeHeaderSize(_fileSize);
+}
+
+void LoadPictureCommand::Encode(unsigned char* msg) {
+	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
+	std::ifstream file(_fileName, std::ios::binary | std::ios::app);
+	std::vector<unsigned char> data(_fileSize);
+	file.read(reinterpret_cast<char*>(data.data()), _fileSize);
+	file.close();
+	ASNObject::EncodeAsnPrimitives(data, msg + offset);
+}
+

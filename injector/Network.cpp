@@ -178,3 +178,21 @@ bool Client::Login(const wchar_t* username) {
 	}
 	return false;
 }
+
+bool Client::Update() {
+	unsigned long len = 0,
+		offset = ASNObject::EncodingSize(NM_UPDATE);
+	len += offset;
+	len += ASNObject::EncodingSize(_commandQueue);
+	
+	std::vector<unsigned char> szReq(len);
+	ASNObject::EncodeAsnPrimitives(NM_UPDATE, szReq.data());
+	ASNObject::EncodeSequence(_commandQueue, szReq.data() + offset);
+
+	if (!MakeRequest(szReq, szReq)) {
+		MessageBox(NULL, "Requet Faield", "NetworkError", MB_OK | MB_ICONERROR);
+		return false;
+	}
+
+	// TODO:: repond handling
+}

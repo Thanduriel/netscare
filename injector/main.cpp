@@ -113,7 +113,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	std::vector<ScareEventCp> events;
 	wchar_t *username = nullptr;
 
-	Client client{};
+	Client client{addresses};
 
 	Gui gui(hInst, addresses);
 
@@ -131,7 +131,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		Action action = gui.update();
 		switch (action.type) {
 		case Action::LOGIN: {
-			if (client.isOnline()) break;
+			if (client.IsOnline()) break;
 			const wchar_t *uName = reinterpret_cast<const wchar_t*>(action.data);
 			if (username) delete[] username;
 			unsigned long len = wcslen(uName) + 1;
@@ -143,27 +143,21 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		}
 		case Action::EV_SETUP: {
 			ScareEvent * scareEv = reinterpret_cast<ScareEvent*>(action.data);
-			/* MessageBox(NULL,
-				(std::to_string(scareEv->target) + "  " + scareEv->file).c_str(),
-				"SetUpEvent", MB_OK); */
 			events.emplace_back( scareEv );
 			client.SendPicture(events.back());
-			// events.back().changeState(ScareEvent::SETTET);
-			// check if data already exiist 
-			// check if user has data or is already pending
-			// delete action.data; ?? dont work
-			// check if already setet
-			// ConvertIamge to DDS
-			// save Path and convertet for later
-			// send dds to Person
-			// on success set addressState state Set
-			// MessageBox(NULL, std::to_string(events.back().id).c_str(), "Last id", MB_OK);
 		}	break;
-		case Action::EV_UPADTE:
-			// same as SetUp but withput set referens
-			break;
-		case Action::EV_TRIGGER: {
-			int id = *reinterpret_cast<int*>(action.data);
+		case Action::EV_UPADTE: {
+			int eventId = *reinterpret_cast<int*>(action.data);
+			for (ScareEventCp& e : events) {
+				if (e.id == eventId) {
+					client.SendPicture(e);
+					break;
+				}
+			}
+		}	break;
+		case Action::EV_TRIGGER:
+			client.TriggerEvent(*reinterpret_cast<int*>(action.data));
+			/* int id = *reinterpret_cast<int*>(action.data);
 			for (auto itr = events.begin(); itr != events.end(); ++itr) {
 				if (itr->id == id && itr->isValid()) {
 					itr->changeState(ScareEvent::EXECUTED);
@@ -172,11 +166,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 					MessageBox(NULL, (std::to_string(itr->target) + "  " + itr->file).c_str(), "Action", MB_OK);
 					break;
 				}
-			}
-				// check if dds path setet
-				// send trigger
-				// clear file
-		}	break;
+			}*/
+			break;
 		case Action::SETCOLOR:
 			actions.push_back(TaskQueue(
 				std::move(action),

@@ -155,7 +155,7 @@ public:
 		else if (fPending) return Task::STATUS_CODE::PENDING;
 		else return Task::STATUS_CODE::SUCCESS;
 	}
-	std::size_t rededBytes() { return length; }
+	std::size_t ReadBytes() const { return length; }
 };
 
 class PipeNode

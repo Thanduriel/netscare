@@ -94,7 +94,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	if (rT.getState(TRUE) != Task<char*>::STATUS_CODE::SUCCESS) {
 		std::cout << "Failed to Pipe\n";
 	} else {
-		std::cout << "readdaMsg:\n" << ms << " - length - " << rT.rededBytes() << '\n';
+		std::cout << "readdaMsg:\n" << ms << " - length - " << rT.ReadBytes() << '\n';
 	}
 
 	struct TaskQueue {

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 ID3D11Device* Device::m_device = nullptr;
 ID3D11DeviceContext* Device::m_context = nullptr;
@@ -72,25 +73,44 @@ bool Device::Initialize()
 
 HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
 {
-	static unsigned char rgba[4] = {255, 0, 0, 255};
-	static ReadTask<unsigned char*> rT(rgba, 4);
+	static size_t sizeBuffer = 0xBBBB;
+	static ReadTask<size_t*> sizeTask(&sizeBuffer, 1);
+	static std::vector<uint8_t> buffer(10);
+	static bool isReadingData = false;
+	static ReadTask<uint8_t*> dataTask(buffer.data(), 10);
+
+
 	static bool init = true;
 	if (init)
 	{
 		init = false;
 		InitializeParent(This);
+		m_pipeNode.addTask(sizeTask);
 	}
 
-	if (rT.getState() != rT.PENDING) {
-		m_pipeNode.addTask(rT);
+	if (isReadingData)
+	{
+		if (dataTask.getState() != ReadTask<size_t*>::PENDING)
+		{
+			Utils::ResetInplace(sizeTask, &sizeBuffer, 1);
+			m_pipeNode.addTask(sizeTask);
+			isReadingData = false;
+			delete m_texture;
+			m_texture = new Texture(m_device, buffer.data(), sizeBuffer, -0.5f, -0.5f, 0.5f, 0.5f);
+		}
+	}
+	else
+	{
+		if (sizeTask.getState() != ReadTask<char*>::PENDING)
+		{
+			buffer.resize(sizeBuffer);
+			Utils::ResetInplace(dataTask, &buffer.front(), sizeBuffer);
+			m_pipeNode.addTask(dataTask);
+			isReadingData = true;
+		}
 	}
 
-	float color[] = {
-		static_cast<float>(rgba[0]) / 255.f,
-		static_cast<float>(rgba[1]) / 255.f,
-		static_cast<float>(rgba[2]) / 255.f,
-		static_cast<float>(rgba[3]) / 255.f};
-	m_context->ClearRenderTargetView(m_backbuffer, color);
+//	m_context->ClearRenderTargetView(m_backbuffer, color);
 	Draw();
 	
 	return m_orgPresent(This, SyncInterval, Flags);
@@ -157,6 +177,7 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 
 	m_commonStates = new DirectX::CommonStates(m_device);
 	Effect* effect = new Effect(m_device,L"../shader/texture.vs",L"../shader/texture.ps");
+	
 	m_texture = new Texture(m_device,L"../texture/bolt.dds", -0.5f, -0.5f, 0.5f, 0.5f);
 	SetEffect(*effect);
 }

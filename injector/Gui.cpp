@@ -257,15 +257,16 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		if (!ShowWindow(hWnd, SW_HIDE))
 			Utils::ShowError("Can't Hide Win", GetLastError());
 		break;
-	case WM_DESTROY: {
-		delete pState;
+	case WM_DESTROY: {		
 		NOTIFYICONDATAA note = { 0 };
 		note.uID = NIF_ID;
 		note.hWnd = hWnd;
 		Shell_NotifyIconA(NIM_DELETE, &note);
+	}	break;
+	case WM_NCDESTROY:
+		delete pState;
 		PostQuitMessage(0);
 		break;
-	}
 	case WM_NOTIFICATIONCALLBACK: {
 		switch (LOWORD(lParam)) {
 		case WM_CONTEXTMENU:
@@ -301,7 +302,9 @@ LRESULT CALLBACK MainWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 		if (!IsWindowVisible(hWnd))ShowWindow(hWnd, SW_SHOW);
 		SetForegroundWindow(hWnd);
 		break;
-	case COM_CLOSE: DestroyWindow(hWnd); break;
+	case COM_CLOSE: 
+		DestroyWindow(hWnd);
+		break;
 	// default: MessageBox(NULL, std::to_string(com).c_str(), "COMANND", MB_OK);
 	}
 	return 0;

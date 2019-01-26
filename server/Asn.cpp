@@ -193,7 +193,7 @@ unsigned char* ASNObject::EncodeAsnPrimitives(const wchar_t* msg, unsigned char*
 	else res = new unsigned char[len + header];
 	res[0] = 0x0c;
 	EncodeLen(len, res + 1);
-	wcscpy_s(reinterpret_cast<wchar_t*>(res + header), len, msg);
+	wcscpy_s(reinterpret_cast<wchar_t*>(res + header), len / sizeof(wchar_t), msg);
 	return res;
 }
 

@@ -21,6 +21,12 @@
 
 namespace fs = std::filesystem;
 
+struct Host {
+	std::wstring name;
+	enum TYPE { IPV4, IPV6 } type;
+	unsigned char address[16];
+};
+
 class Client {
 	HINTERNET _hIntSession;
 	HINTERNET _hHttpSession;
@@ -49,4 +55,5 @@ public:
 	bool SendPicture(ScareEventCp& eventCp);
 	void TriggerEvent(int eventId) { _commandQueue.emplace_back(std::make_unique<TriggerEventCommand>(eventId)); }
 	bool Update();
+	bool SearchServer(std::vector<std::string>);
 };

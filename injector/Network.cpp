@@ -1,3 +1,4 @@
+#include "../../dependencies/DirectXTex/DirectXTex/DirectXTex.h"
 #include "Network.hpp"
 
 namespace fs = std::filesystem;
@@ -5,13 +6,6 @@ namespace fs = std::filesystem;
 bool Client::MakeRequest(std::vector<unsigned char>& res, std::vector<unsigned char>& msg, const char* subPage) {
 	HINTERNET hHttpRequest = HttpOpenRequestA(_hHttpSession, _T("POST"), _T(subPage), NULL, "application/asn", NULL, INTERNET_FLAG_RELOAD, 0);
 	TCHAR* szHeader = _T("Content-Type: application/asn");
-	
-	ASNObject *asn = ASNObject::DecodeAsn(msg.data(), msg.size());
-	for (unsigned long pos = 0; pos < msg.size(); pos += asn->GetSize(), ++asn) {
-		if (asn->GetType() != ASNObject::UTF8String) std::cout << *asn;
-		else std::wcout << L"UTF8: " << asn->DecodeUTF8() << L'\n';
-	}
-
 	
 	if (!HttpSendRequestA(hHttpRequest, szHeader, _tcslen(szHeader), msg.data(), msg.size())) {
 		Utils::ShowError("Erroro when send", GetLastError());
@@ -25,11 +19,6 @@ bool Client::MakeRequest(std::vector<unsigned char>& res, std::vector<unsigned c
 	while (InternetReadFile(hHttpRequest, szBuffer, sizeof(szBuffer) - 1, &dwRead) && dwRead) {
 		res.insert(res.end(), szBuffer, szBuffer + dwRead);
 		dwRead = 0;
-	}
-
-	ASNObject* asnO = ASNObject::DecodeAsn(res.data(), res.size());
-	for (unsigned long pos = 0; pos < res.size(); pos += asnO->GetSize(), ++asnO) {
-		std::cout << *asnO;
 	}
 
 	InternetCloseHandle(hHttpRequest);
@@ -53,12 +42,34 @@ bool Client::SendPicture(ScareEventCp& eventCp) {
 	if (state == STATE::CHECK) {
 		picId = _mapPicId.size();
 
-		std::ifstream file(path, std::ios::binary | std::ios::ate);
-		std::streamoff size = file.tellg();
-		file.seekg(std::ios_base::beg);
-		std::vector<unsigned char> data(static_cast<std::size_t>(size));
-		file.read(reinterpret_cast<char*>(data.data()), data.size());
-		file.close();
+		std::vector<unsigned char> data;
+
+		fs::path extension = path.extension();
+		if (strcmp(extension.string().c_str(), ".dds") == 0
+			|| strcmp(extension.string().c_str(), ".DDS") == 0) {
+			std::ifstream file(path, std::ios::binary | std::ios::ate);
+			std::streamoff size = file.tellg();
+			file.seekg(std::ios_base::beg);
+			data.resize(static_cast<std::size_t>(size));
+			file.read(reinterpret_cast<char*>(data.data()), data.size());
+			file.close();
+		} else {
+			std::unique_ptr<DirectX::ScratchImage> image = std::make_unique<DirectX::ScratchImage>();
+			HRESULT hr = DirectX::LoadFromWICFile( path.wstring().c_str(), DirectX::WIC_FLAGS_NONE, nullptr, *image);
+			if (FAILED(hr)) {
+				MessageBoxA(NULL, path.string().c_str(), "Cannot connvert File", MB_OK | MB_ICONERROR);
+				return false;
+			}
+			DirectX::Blob blob{};
+			hr = DirectX::SaveToDDSMemory(*(image->GetImages()), DirectX::WIC_FLAGS_NONE, blob);
+			if (FAILED(hr)) {
+				MessageBoxA(NULL, path.string().c_str(), "Cannot Save DDS", MB_OK | MB_ICONERROR);
+				return false;
+			}
+			data.resize(blob.GetBufferSize());
+			memcpy_s(data.data(), data.size(), blob.GetBufferPointer(), blob.GetBufferSize());
+		}
+
 
 
 		unsigned long decode[] = {
@@ -122,7 +133,6 @@ bool Client::SendPicture(ScareEventCp& eventCp) {
 } 
 
 bool Client::Login(const wchar_t* username) {
-
 	if (_bLogIn) {
 		MessageBox(NULL, "You Already Login", "User Error", MB_OK | MB_ICONWARNING);
 		return false;
@@ -143,7 +153,8 @@ bool Client::Login(const wchar_t* username) {
 		return false;
 	}
 	
-	ASNObject *itr, *asn = ASNObject::DecodeAsn(res.data(), res.size());
+	ASNObject *itr;
+	ASNObject::ASNDecodeReturn asn = ASNObject::DecodeAsn(res.data(), res.size());
 	itr = asn;
 	int id = 0;
 	enum STATE { CHECK, FAILED, SUCCESS, DEFECT } state = CHECK;
@@ -180,6 +191,8 @@ bool Client::Login(const wchar_t* username) {
 }
 
 bool Client::Update() {
+	return false; // TODO fix
+	if (!_bLogIn) return false;
 	unsigned long len = 0,
 		offset = ASNObject::EncodingSize(NM_UPDATE);
 	len += offset;

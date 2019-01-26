@@ -23,18 +23,19 @@ int __cdecl wmain(int argc, wchar_t **argv) {
 	Tickets tickets(20);
 	std::vector<User> users{};
 
-	NetScareServer server(argc, argv, users);
+	NetScareServer server(argc, argv, users, tickets);
 	NetScareServer::Action action;
 	do {
 		Sleep(100);
 		server.UpdateServer(action);
 		switch (action.type) {
 		case NetScareServer::Action::USER_NEW:
-			users.push_back(User(reinterpret_cast<wchar_t*>(action.data)));
-			delete[] action.data;
+			/* users.push_back(User(reinterpret_cast<wchar_t*>(action.data)));
+			tickets.AddUser();
+			delete[] action.data; */
 			break;
 		case NetScareServer::Action::PIC_LOAD: {
-			std::uint8_t user = action.data[0], pId = action.data[1];
+			/* std::uint8_t user = action.data[0], pId = action.data[1];
 			std::size_t len = *reinterpret_cast<std::size_t*>(action.data + 2);
 			char fName[32];
 			sprintf_s(fName, "%d_%d.dds", user, pId);
@@ -47,13 +48,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
 			} else {
 				users[user].UpdatePic(pId);
 			}
-			delete[] action.data;
+			delete[] action.data; */
 		}	break;
 		case NetScareServer::Action::EVENT_ADD: {
-			char name[25];
+			/* char name[25];
 			sprintf_s(name, "%d_%d.dds", action.data[0], action.data[1]);
 			users[action.data[0]].AddEvent(action.data[0], action.data[1], *reinterpret_cast<std::uint8_t*>(action.data + 2), _access(name, 0));
-			delete[] action.data;
+			delete[] action.data; */
 		}	break;
 		}
 	} while (true);

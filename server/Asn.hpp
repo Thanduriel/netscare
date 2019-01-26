@@ -49,14 +49,56 @@ public:
 	}
 	friend std::ostream& operator <<(std::ostream& os, const ASNObject& obj);
 	static ASNDecodeReturn DecodeAsn(const unsigned char* data, unsigned long size, std::uint8_t deep = 0);
+	
+	
 	static unsigned long EncodingSize(const std::vector<unsigned char>& data);
 	static const unsigned char* EncodeAsnPrimitives(const std::vector<unsigned char>& data, unsigned char* destionation = nullptr);
+	static const unsigned char* EncodeAsnPrimitives(const unsigned char* begin, const unsigned char* end, unsigned char* destination = nullptr);
+
 	static unsigned long EncodingSize(const int num);
 	static const unsigned char* EncodeAsnPrimitives(const int num, unsigned char* destination = nullptr);
+
 	static unsigned long EncodingSize(const wchar_t* msg);
 	static unsigned char* EncodeAsnPrimitives(const wchar_t* msg, unsigned char* destination = nullptr);
-	static unsigned long EncodingSize(const std::vector<std::unique_ptr<Command>>& commands);
-	static const unsigned char* EncodeSequence(std::vector<std::unique_ptr<Command>> const& commands, unsigned char* destination = nullptr);
+	
 	static unsigned long EncodingSize(const char* msg);
 	static const unsigned char* EncodeAsnPrimitives(const char* msg, unsigned char* destination = nullptr);
+
+	template <typename T> // CommadnPtr
+	static unsigned long EncodingSize(const std::vector<T>& commands) {
+		unsigned long len = 0, b;
+		for (const T& c : commands) {
+			b = c->EncodeSize();
+			len += b + EncodeHeaderSize(b);
+		}
+		return 1 + EncodeLenSize(len) + len;
+	}
+	template <typename T>
+	static const unsigned char* EncodeSequence(const std::vector<T>& commands, unsigned char* destination) {
+		unsigned long len = 0, b;
+		for (const T& c : commands) {
+			b = c->EncodeSize();
+			len += b + EncodeHeaderSize(b);
+		}
+
+		const unsigned long header = 1 + EncodeLenSize(len);
+		unsigned char* res;
+		if (destination) res = destination;
+		else {
+			res = new unsigned char[header + len];
+		}
+		res[0] = TYPE::SEQUENCE;
+		EncodeLen(len, res + 1);
+		unsigned char* p = res + header;
+		for (const T& c : commands) {
+			*p = TYPE::SEQUENCE;
+			b = c->EncodeSize();
+			EncodeLen(b, ++p);
+			p += EncodeLenSize(b);
+			c->Encode(p);
+			p += b;
+		}
+		assert(p - res == len + header);
+		return res;
+	}
 };

@@ -162,14 +162,17 @@ ASNObject::ASNDecodeReturn ASNObject::DecodeAsn(const unsigned char* data, unsig
 unsigned long ASNObject::EncodingSize(const std::vector<unsigned char>& data) {
 	return 1 + EncodeLenSize(data.size()) + data.size();
 }
-const unsigned char* ASNObject::EncodeAsnPrimitives(const std::vector<unsigned char>& data, unsigned char* destionation) {
-	unsigned long header = 1 + EncodeLenSize(data.size());
+const unsigned char* ASNObject::EncodeAsnPrimitives(const std::vector<unsigned char>& data, unsigned char* destination) {
+	return EncodeAsnPrimitives(data.data(), data.data() + data.size(), destination);
+}
+const unsigned char* ASNObject::EncodeAsnPrimitives(const unsigned char* begin, const unsigned char* end, unsigned char* destination) {
+	unsigned long header = 1 + EncodeLenSize(end - begin);
 	unsigned char *res;
-	if (destionation) res = destionation;
-	else res = new unsigned char[header + data.size()];
+	if (destination) res = destination;
+	else res = new unsigned char[header + (end - begin)];
 	res[0] = OCTASTRING;
-	EncodeLen(data.size(), res + 1);
-	memcpy(res + header, data.data(), data.size());
+	EncodeLen(end - begin, res + 1);
+	memcpy(res + header, begin, end - begin);
 	return res;
 }
 
@@ -203,47 +206,12 @@ unsigned char* ASNObject::EncodeAsnPrimitives(const wchar_t* msg, unsigned char*
 	unsigned char* res;
 	if (destination) res = destination;
 	else res = new unsigned char[len + header];
-	res[0] = 0x0c;
+	res[0] = UTF8String;
 	EncodeLen(len, res + 1);
 	wcscpy_s(reinterpret_cast<wchar_t*>(res + header), len / sizeof(wchar_t), msg);
 	return res;
 }
 
-unsigned long ASNObject::EncodingSize(const std::vector<std::unique_ptr<Command>>& commands) {
-	unsigned long len = 0, b;
-	for (const std::unique_ptr<Command>& c : commands) {
-		b = c->EncodeSize();
-		len += b + EncodeHeaderSize(b);
-	}
-	return 1 + EncodeLenSize(len) + len;
-}
-const unsigned char* ASNObject::EncodeSequence(std::vector<std::unique_ptr<Command>> const& commands, unsigned char* destination) {
-	unsigned long len = 0, b;
-	for (const std::unique_ptr<Command>& c : commands) {
-		b = c->EncodeSize();
-		len += b + EncodeHeaderSize(b);
-	}
-
-	const unsigned long header = 1 + EncodeLenSize(len);
-	unsigned char* res;
-	if (destination) res = destination;
-	else {
-		res = new unsigned char[header + len];
-	}
-	res[0] = TYPE::SEQUENCE;
-	EncodeLen(len, res + 1);
-	unsigned char* p = res + header;
-	for (const std::unique_ptr<Command>& c : commands) {
-		*p = TYPE::SEQUENCE;
-		b = c->EncodeSize();
-		EncodeLen(b, ++p);
-		p += EncodeLenSize(b);
-		c->Encode(p);
-		p += b;
-	}
-	assert(p - res == len + header);
-	return res;
-}
 
 unsigned long ASNObject::EncodingSize(const char* msg) {
 	unsigned long len = strlen(msg) + 1;

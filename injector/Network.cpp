@@ -207,20 +207,62 @@ bool Client::Update() {
 		};
 	len += offset[0] + offset[1];
 	if (!_commandQueue.empty())
-		len += ASNObject::EncodingSize(_commandQueue);
+		len += ASNObject::EncodingSize<std::unique_ptr<Command>>(_commandQueue);
 	
 	std::vector<unsigned char> szReq(len);
 	ASNObject::EncodeAsnPrimitives(NM_UPDATE, szReq.data());
 	ASNObject::EncodeAsnPrimitives(_userId, szReq.data() + offset[0]);
 	if (!_commandQueue.empty())
-		ASNObject::EncodeSequence(_commandQueue, szReq.data() + offset[0] + offset[1]);
+		ASNObject::EncodeSequence<std::unique_ptr<Command>>(_commandQueue, szReq.data() + offset[0] + offset[1]);
 
 	if (!MakeRequest(szReq, szReq)) {
 		MessageBox(NULL, "Requet Faield", "NetworkError", MB_OK | MB_ICONERROR);
 		return false;
 	}
-
-	// TODO:: repond handling
 	_commandQueue.resize(0);
+
+	ASNObject::ASNDecodeReturn asn = ASNObject::DecodeAsn(szReq.data(), szReq.size());
+	if (asn.len != 2
+		|| asn.objects[0].GetType() != ASNObject::ASCISTRING
+		|| asn.objects[1].GetType() != ASNObject::SEQUENCE) return false;
+	ASNObject::ASNDecodeReturn cmds = asn.objects[1].DecodeASNObjscets();
+	for (unsigned long i = 0; i < cmds.len; ++i) {
+		if (cmds.objects[i].GetType() != ASNObject::SEQUENCE) continue;
+		std::unique_ptr<Command> cmd = Command::Decode(cmds.objects[i].DecodeASNObjscets());
+		switch (cmd->GetType()) {
+		
+		case Command::TYPE::ADD_USER: {
+			AddUserCommand *aue = dynamic_cast<AddUserCommand*>(cmd.get());
+			if (aue) { 
+				if (aue->GetId() != _userId) _addresses.push_back(Address(aue->GetUsername(), aue->GetId(), 0));
+			}
+			else MessageBox(NULL, "Adress Update Failed", "Error", MB_OK | MB_ICONERROR);
+		}	break;
+		
+		case Command::TYPE::TRIGGEREVENT:
+			MessageBox(NULL, "Event Trigger", "Action", MB_OK);
+			break;
+
+		case Command::TYPE::DOWNLAOD_PIC: {
+			LoadPictureCommand * lpc = dynamic_cast<LoadPictureCommand*>(cmd.get());
+			if (!lpc) MessageBox(NULL, "Download Picture", "Failed", MB_OK | MB_ICONERROR);
+			else {
+				// MessageBox(NULL, "Load", "Load File", MB_OK);
+				if (!lpc->SavePicture(".")) MessageBox(NULL, ".", "Failed to save File:", MB_OK | MB_ICONERROR);
+			}
+		}	break;
+		
+		case Command::TYPE::UPDATE_TICKETS: {
+			UpdateTicketsCommand *utc = dynamic_cast<UpdateTicketsCommand*>(cmd.get());
+			if (!utc) std::cout << "Failed to Decode Update Tickets\n";
+			else {
+				for (auto& a : _addresses) {
+					if (a.userId >= 0 && static_cast<std::size_t>(a.userId) < utc->userAmt)
+						a.tickets = utc->tickest[a.userId];
+				}
+			}
+		}	break;
+		}
+	}
 	return true;
 }

@@ -43,7 +43,7 @@ class Client {
 	std::vector<std::unique_ptr<Command>> _commandQueue;
 	bool SendPicture(ScareEventCp& eventCp);
 public:
-	Client(std::vector<Address>& addresses, const char* hostname = "localhost", unsigned int port = 9090) : _userId{ 0 }, _bLogIn{ false }, _addresses{ addresses} {
+	Client(std::vector<Address>& addresses, const char* hostname = "10.0.17.227", unsigned int port = 9090) : _userId{ 0 }, _bLogIn{ false }, _addresses{ addresses} {
 		_hIntSession = InternetOpenA(_T("Client"), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
 		_hHttpSession = InternetConnectA(_hIntSession, _T(hostname), port, NULL, NULL, INTERNET_SERVICE_HTTP, 0, NULL);
 	}

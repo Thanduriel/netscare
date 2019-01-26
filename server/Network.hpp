@@ -64,6 +64,7 @@ private:
 		PHTTP_REQUEST pRequest
 	);
 	std::vector<User>& _users;
+	Tickets& _tickets;
 	struct CommandHis {
 		std::unique_ptr<Command> command;
 		std::uint8_t target;
@@ -76,7 +77,7 @@ private:
 	RESPONDERRORS LoadPictureResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
 	RESPONDERRORS UpdateStateResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
 public:
-	NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users);
+	NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users, Tickets& tickets);
 	~NetScareServer();
 	ULONG GetLastRedCode() { return redCode; }
 	ULONG UpdateServer(OUT Action& action, BOOL wait = FALSE);

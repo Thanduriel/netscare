@@ -173,6 +173,8 @@ void addUI(HWND hWnd, AddressBookState *pState) {
 	int num = 1;
 	for (std::size_t i = 0; i < pState->addresses.size(); ++i) {
 		Address adr = pState->addresses[i];
+		if (pState->addresses.size() > pState->reservt.size())
+			pState->reservt.resize(pState->addresses.size(), 0);
 		CreateWindowW(L"button", (adr.name + L": Tickets " + std::to_wstring(adr.tickets) + L" (" + std::to_wstring(pState->reservt[i]) + L")").c_str(), 
 			WS_CHILD | WS_BORDER |WS_VISIBLE | ( adr.tickets - pState->reservt[i] > 0 ? 0 : WS_DISABLED),
 			DIM_ADDRESSLINE.x, DIM_ADDRESSLINE.y + h, DIM_ADDRESSLINE.width, DIM_ADDRESSLINE.height, hWnd, (HMENU)num, NULL, NULL);

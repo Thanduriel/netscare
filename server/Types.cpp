@@ -3,7 +3,7 @@
 int User::num = 0;
 
 Tickets::Tickets(int aproxUsers) : _data{ new std::uint8_t[aproxUsers * aproxUsers] }, _amtUser{ 0 }, _capacity{ aproxUsers } {
-	memset(_data, 0, aproxUsers * aproxUsers * sizeof(std::uint8_t));
+	memset(_data, 5, aproxUsers * aproxUsers * sizeof(std::uint8_t)); // TODO: to zero
 }
 Tickets::~Tickets() { delete[] _data; }
 void Tickets::Realloc(int size) {
@@ -48,10 +48,10 @@ Tickets::TRASNACTION Tickets::Transaction(std::uint8_t u1, std::uint8_t u2, cons
 	return res;
 }
 
-User::User(const wchar_t *name) : id{ static_cast<std::uint8_t>(num++) }, name{ name }, events{}, states{}, ecexuted{ 0 } {
+User::User(const wchar_t *name) : id{ static_cast<std::uint8_t>(num++) }, name{ name }, events{}, states{}, executedCommands{ 0 } {
 	if (num > 255) MessageBoxA(NULL, "To many User\n", "memeory Error", MB_OK | MB_ICONERROR);
 }
-User::User(const char *name) : id{ static_cast<std::uint8_t>(num++) }, events{}, states{}, ecexuted{ 0 }, name{name, name + strlen(name) + 1} {
+User::User(const char *name) : id{ static_cast<std::uint8_t>(num++) }, events{}, states{}, executedCommands{ 0 }, name{name, name + strlen(name) + 1} {
 	if (num > 255) MessageBoxA(NULL, "To many User\n", "memeory Error", MB_OK | MB_ICONERROR);
 }
 
@@ -78,16 +78,17 @@ void User::LoadPic(std::uint8_t picId) {
 }
 
 std::unique_ptr<Command> Command::Decode(const ASNObject::ASNDecodeReturn& asn) {
-	if (asn.len < 1 || asn.objects[0].GetType() != ASNObject::ASCISTRING) return nullptr;
+	if (asn.len < 1 || asn.objects[0].GetType() != ASNObject::ASCISTRING) 
+		return nullptr;
 	const char* type = asn.objects[0].DecodeString();
 	if (strcmp(type, Command::IDENTIFYER[ADD_USER]) == 0) {
 		if (asn.len != 3
-			|| asn.objects[1].GetType() != ASNObject::UTF8String
-			|| asn.objects[1].GetDataSize() / sizeof(wchar_t) > MAX_NAME
-			|| asn.objects[2].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(ADD_USER);
-		int id = asn.objects[2].DecodeInteger();
+			|| asn.objects[2].GetType() != ASNObject::UTF8String
+			|| asn.objects[2].GetDataSize() / sizeof(wchar_t) > MAX_NAME
+			|| asn.objects[1].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(ADD_USER);
+		int id = asn.objects[1].DecodeInteger();
 		if (id > 255) return std::make_unique<Command>(ADD_USER);
-		return std::make_unique<AddUserCommand>(asn.objects[1].DecodeUTF8(), static_cast<std::uint8_t>(id));
+		return std::make_unique<AddUserCommand>(asn.objects[2].DecodeUTF8(), static_cast<std::uint8_t>(id));
 	} else if (strcmp(type, Command::IDENTIFYER[TRIGGEREVENT]) == 0){
 		if (asn.len != 2
 			|| asn.objects[1].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(TRIGGEREVENT);
@@ -100,46 +101,55 @@ std::unique_ptr<Command> Command::Decode(const ASNObject::ASNDecodeReturn& asn) 
 			|| asn.objects[2].GetDataSize() > 2
 			|| asn.objects[3].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(ADDEVENT);
 			return std::make_unique<AddEventCommand>(static_cast<std::uint8_t>(asn.objects[3].DecodeInteger()), static_cast<std::uint8_t>(asn.objects[2].DecodeInteger()), asn.objects[1].DecodeInteger());
+	} else if (strcmp(type, Command::IDENTIFYER[UPDATE_TICKETS]) == 0) {
+		if (asn.len != 2
+			|| asn.objects[1].GetType() != ASNObject::OCTASTRING) return std::make_unique<Command>(UPDATE_TICKETS);
+		return std::make_unique<UpdateTicketsCommand>(asn.objects[1].GetRaw(), asn.objects[1].GetDataSize());
+	} else if (strcmp(type, Command::IDENTIFYER[DOWNLAOD_PIC]) == 0) {
+		if (asn.len != 3
+			|| asn.objects[1].GetType() != ASNObject::ASCISTRING
+			|| asn.objects[2].GetType() != ASNObject::OCTASTRING) return std::make_unique<Command>(DOWNLAOD_PIC);
+		return std::make_unique<LoadPictureCommand>(asn.objects[1].DecodeString(), asn.objects[2].GetDataSize(), asn.objects[2].GetRaw());
 	}
 	return nullptr;
 }
 
-unsigned long AddUserCommand::EncodeSize() {
+unsigned long AddUserCommand::EncodeSize() const {
 	if (_idSize && _size) return _size;
 	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
-	_size = _idSize + ASNObject::EncodingSize(_username) + _numSize;
+	_size = _idSize + ASNObject::EncodingSize(_username) + ASNObject::EncodingSize(static_cast<int>(_id));
 	return _size;
 }
 
-void AddUserCommand::Encode(unsigned char* msg) {
+void AddUserCommand::Encode(unsigned char* msg) const {
 	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
 	ASNObject::EncodeAsnPrimitives(_id, msg + offset);
-	offset += _numSize;
+	offset += ASNObject::EncodingSize(static_cast<int>(_id));
 	ASNObject::EncodeAsnPrimitives(_username, msg + offset);
 }
 
-unsigned long TriggerEventCommand::EncodeSize() {
+unsigned long TriggerEventCommand::EncodeSize() const {
 	if (_idSize && _size) return _size;
 	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	_size = _idSize + ASNObject::EncodingSize(_eventId);
 	return _size;
 }
 
-void TriggerEventCommand::Encode(unsigned char* msg) {
+void TriggerEventCommand::Encode(unsigned char* msg) const {
 	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
 	ASNObject::EncodeAsnPrimitives(_eventId, msg + offset);
 }
 
-unsigned long AddEventCommand::EncodeSize() {
+unsigned long AddEventCommand::EncodeSize() const{
 	if (_idSize & _size) return _size;
 	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	_size = _idSize + ASNObject::EncodingSize(_eventId) + ASNObject::EncodingSize(_pId) + ASNObject::EncodingSize(_target);
 	return _size;
 }
 
-void AddEventCommand::Encode(unsigned char* msg) {
+void AddEventCommand::Encode(unsigned char* msg) const {
 	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
 	ASNObject::EncodeAsnPrimitives(_eventId, msg + offset);
@@ -149,20 +159,46 @@ void AddEventCommand::Encode(unsigned char* msg) {
 	ASNObject::EncodeAsnPrimitives(_target, msg + offset);
 }
 
-unsigned long LoadPictureCommand::EncodeSize() {
+bool LoadPictureCommand::SavePicture(fs::path path) {
+	path /= _fileName;
+	path = fs::absolute(path);
+	MessageBox(NULL, path.string().c_str(), "Download File", MB_OK | MB_ICONINFORMATION);
+	std::ofstream file(path.string(), std::ios::binary);
+	if (file.fail()) return false;
+	file.write(reinterpret_cast<const char*>(_data), _fileSize);
+	if (file.fail()) return false;
+	return true;
+}
+
+unsigned long LoadPictureCommand::EncodeSize() const {
 	if (_idSize && _size) return _size;
 	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
-	_size = _idSize + _fileSize + ASNObject::EncodeHeaderSize(_fileSize);
+	_size = _idSize + _fileSize + ASNObject::EncodeHeaderSize(_fileSize) + ASNObject::EncodingSize(_fileName);
 	return _size;
 }
 
-void LoadPictureCommand::Encode(unsigned char* msg) {
+void LoadPictureCommand::Encode(unsigned char* msg) const {
 	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
 	std::ifstream file(_fileName, std::ios::binary | std::ios::app);
 	std::vector<unsigned char> data(_fileSize);
 	file.read(reinterpret_cast<char*>(data.data()), _fileSize);
 	file.close();
+	ASNObject::EncodeAsnPrimitives(_fileName, msg + offset);
+	offset += ASNObject::EncodingSize(_fileName);
 	ASNObject::EncodeAsnPrimitives(data, msg + offset);
+}
+
+unsigned long UpdateTicketsCommand::EncodeSize() const {
+	if (_idSize && _size) return _size;
+	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	_size = _idSize + ASNObject::EncodeHeaderSize(userAmt) + userAmt;
+	return _size;
+}
+
+void UpdateTicketsCommand::Encode(unsigned char* msg) const {
+	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
+	ASNObject::EncodeAsnPrimitives(tickest, tickest + userAmt, msg + offset);
 }
 

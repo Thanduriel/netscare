@@ -4,7 +4,7 @@
 
 namespace fs = std::filesystem;
 
-NetScareServer::NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{ 0 }, _users{ users } {
+NetScareServer::NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users, Tickets& tickets) : urlC{ urlC }, urls{ urls }, hReqQueue{ NULL }, urlAdded{ 0 }, bPending{ false }, overlapped{ 0 }, _users{ users }, _tickets{ tickets} {
 	ULONG retCode;
 	HTTPAPI_VERSION httpApiVersion = HTTPAPI_VERSION_1;
 	DWORD a = 0;
@@ -250,6 +250,7 @@ NetScareServer::RESPONDERRORS NetScareServer::LoginResponde(const ASNObject::ASN
 	}
 	else {
 		_users.push_back(User(asn.objects[1].DecodeUTF8()));
+		_tickets.AddUser();
 		std::wcout << L"AddedUser: " << _users.back().GetName().c_str() << '\n';
 		unsigned long decode[] = {
 			ASNObject::EncodingSize(NM_SUCCESS),
@@ -259,63 +260,84 @@ NetScareServer::RESPONDERRORS NetScareServer::LoginResponde(const ASNObject::ASN
 		msg = new unsigned char[len];
 		ASNObject::EncodeAsnPrimitives(NM_SUCCESS, msg);
 		ASNObject::EncodeAsnPrimitives(_users.back().id, msg + decode[0]);
+		_commandHistory.emplace_back(std::make_unique<AddUserCommand>(_users.back().GetName().c_str(), _users.back().id), 0xFF, _users.back().id);
 	}
 	return RESPONDERRORS::SUCCEESS;
 }
 
 NetScareServer::RESPONDERRORS NetScareServer::UpdateStateResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len) {
-	if (asn.len != 3
+	if (asn.len > 3
+		|| asn.len < 2
 		|| asn.objects[1].GetType() != ASNObject::INTEGER
-		|| asn.objects[2].GetType() != ASNObject::SEQUENCE) return RESPONDERRORS::INVALID_DATA;
+		|| asn.len == 3 && asn.objects[2].GetType() != ASNObject::SEQUENCE) {
+		return RESPONDERRORS::INVALID_DATA;
+	}
+	std::cout << "check\n";
 	int uId = asn.objects[1].DecodeInteger();
 	// check if user Exist
 	bool findUser = false;
-	for (const User& u : _users) {
-		if (u.id == uId) {
-			findUser = true;
-			break;
+	if (uId >= 0) {
+		for (const User& u : _users) {
+			if (u.id == uId) {
+				findUser = true;
+				break;
+			}
 		}
 	}
 	if (findUser) {
-		ASNObject::ASNDecodeReturn commands = asn.objects[2].DecodeASNObjscets();
-		for(unsigned long i = 0; i < commands.len; ++i) {
-			if (commands.objects[i].GetType() != ASNObject::SEQUENCE) return RESPONDERRORS::INVALID_DATA;
-			std::unique_ptr<Command> cmd = Command::Decode(commands.objects[i].DecodeASNObjscets());
- 			if (cmd->GetState() == Command::DECODERESULT::CORRUPTED) return RESPONDERRORS::INVALID_DATA;
-			switch (cmd->GetType()) {
-			case Command::TYPE::TRIGGEREVENT: {
-				TriggerEventCommand * tcd = dynamic_cast<TriggerEventCommand*>(cmd.get());
-				if (!tcd) std::cout << "Failed to Tecode TriggerEvent!\n";
-				else {
-					int eId = tcd->GetEventId();
-					if (uId >= _users.size()) std::cout << "UnknownUser Id " << static_cast<int>(uId) << "\n";
-					_commandHistory.emplace_back(std::move(cmd), _users[uId].GetEvent(eId).target, uId);
-					std::cout << "Trigger EventId " << eId << " from userId: " << static_cast<int>(uId) << '\n';
+		if (asn.len >= 3) {
+			ASNObject::ASNDecodeReturn commands = asn.objects[2].DecodeASNObjscets();
+			for (unsigned long i = 0; i < commands.len; ++i) {
+				if (commands.objects[i].GetType() != ASNObject::SEQUENCE) return RESPONDERRORS::INVALID_DATA;
+				std::unique_ptr<Command> cmd = Command::Decode(commands.objects[i].DecodeASNObjscets());
+				if (cmd->GetState() == Command::DECODERESULT::CORRUPTED) return RESPONDERRORS::INVALID_DATA;
+				switch (cmd->GetType()) {
+				case Command::TYPE::TRIGGEREVENT: {
+					TriggerEventCommand * tcd = dynamic_cast<TriggerEventCommand*>(cmd.get());
+					if (!tcd) std::cout << "Failed to Tecode TriggerEvent!\n";
+					else {
+						int eId = tcd->GetEventId();
+						if (static_cast<unsigned int>(uId) >= _users.size()) std::cout << "UnknownUser Id " << static_cast<int>(uId) << "\n";
+						if (_tickets.GetTicket(uId, _users[uId].GetEvent(eId).target) <= 0) {
+							std::cout << "Trigger Event no Tickets: " << eId << " from User: " << static_cast<int>(uId) << '\n';
+							continue;
+						}
+						_commandHistory.emplace_back(std::move(cmd), _users[uId].GetEvent(eId).target, uId);
+						std::cout << "Trigger EventId " << eId << " from userId: " << static_cast<int>(uId) << '\n';
+					}
+				} break;
+				case Command::TYPE::ADDEVENT: {
+					AddEventCommand *aec = dynamic_cast<AddEventCommand*>(cmd.get());
+					if (!aec) std::cout << "Failed to Decode AddEvent!\n";
+					else {
+						AddEventCommand::Event ev = aec->GetEvent();
+						_commandHistory.emplace_back(std::move(cmd), ev.target, uId);
+						char fileName[32];
+						sprintf_s(fileName, "%d_%d.dds", uId, ev.pId);
+						bool ac = _access(fileName, 0) == 0;
+						_users[uId].AddEvent(ev.target, ev.pId, uId, ac);
+						if (ac) {
+							_commandHistory.emplace_back(std::make_unique<LoadPictureCommand>(fileName), ev.target, uId);
+							std::cout << "Chained File\n";
+						}
+						else {
+							std::cout << "NoFile: " << fileName << '\n';
+						}
+						std::cout << "AddEvent: " << ev.eventId << " pId:" << static_cast<int>(ev.pId) << " target: " << static_cast<int>(ev.target) << '\n';
+					}
+				}	break;
+				default: {
+					unsigned long decode[] = {
+						ASNObject::EncodingSize(NM_FAILED),
+						ASNObject::EncodingSize(MSG_UNNOKNCOMMAND)
+					};
+					len = decode[0] + decode[1];
+					msg = new unsigned char[len];
+					ASNObject::EncodeAsnPrimitives(NM_FAILED, msg);
+					ASNObject::EncodeAsnPrimitives(MSG_UNNOKNCOMMAND, msg + decode[0]);
+					return RESPONDERRORS::SUCCEESS;
 				}
-			} break;
-			case Command::TYPE::ADDEVENT: {
-				AddEventCommand *aec = dynamic_cast<AddEventCommand*>(cmd.get());
-				if (!aec) std::cout << "Failed to Decode AddEvent!\n";
-				else {
-					AddEventCommand::Event ev = aec->GetEvent();
-					_commandHistory.emplace_back(std::move(cmd), ev.target, ev.eventId);
-					char fileName[32];
-					sprintf_s(fileName, "%ud_%ud.dds", uId, ev.pId);
-					_users[uId].AddEvent(ev.target, ev.pId, uId, _access(fileName, 0) == 0);
-					std::cout << "AddEvent: " << ev.eventId << " pId:" << static_cast<int>(ev.pId) << " target: " << static_cast<int>(ev.target) << '\n';
 				}
-			}	break;
-			default: {
-				unsigned long decode[] = {
-					ASNObject::EncodingSize(NM_FAILED),
-					ASNObject::EncodingSize(MSG_UNNOKNCOMMAND)
-				};
-				len = decode[0] + decode[1];
-				msg = new unsigned char[len];
-				ASNObject::EncodeAsnPrimitives(NM_FAILED, msg);
-				ASNObject::EncodeAsnPrimitives(MSG_UNNOKNCOMMAND, msg + decode[0]);
-				return RESPONDERRORS::SUCCEESS;
-			}
 			}
 		}
 	} else {
@@ -328,6 +350,35 @@ NetScareServer::RESPONDERRORS NetScareServer::UpdateStateResponde(const ASNObjec
 		ASNObject::EncodeAsnPrimitives(NM_FAILED, msg);
 		ASNObject::EncodeAsnPrimitives(MSG_UNKNOWNUSER, msg + decode[0]);
 	}
+
+	// createRespond Mesage
+	len = 0;
+	unsigned long offset[] = {
+		ASNObject::EncodingSize(NM_SUCCESS),
+	};
+	for (unsigned long l : offset) len += l;
+
+	std::unique_ptr<UpdateTicketsCommand>update = nullptr;
+
+	std::vector<const Command*> cmds(0);
+	if (_users[uId].executedCommands < _commandHistory.size()) {
+		for (auto itr = _commandHistory.begin() + _users[uId].executedCommands; itr < _commandHistory.end(); ++itr) {
+			if (itr->target == 0xFF || itr->target == uId) {
+				cmds.emplace_back(itr->command.get());
+			}
+		}
+		update = std::make_unique<UpdateTicketsCommand>(_tickets, uId);
+		cmds.emplace_back(update.get());
+		_users[uId].executedCommands = _commandHistory.size();
+		len += ASNObject::EncodingSize(cmds);
+		std::cout << "update " << cmds.size() << '\n';
+	}
+
+	msg = new unsigned char[len];
+
+	ASNObject::EncodeAsnPrimitives(NM_SUCCESS, msg);
+	if(cmds.size())	ASNObject::EncodeSequence(cmds, msg + offset[0]);
+
 	return RESPONDERRORS::SUCCEESS;
 }
 
@@ -446,6 +497,8 @@ DWORD NetScareServer::SendHttpPostResponse(
 				} else std::cout << "Cant resolve Requets No String Type: " << asn.objects[0].GetType() << '\n';
 
 				if (resultState == RESPONDERRORS::INVALID_DATA || resultState == RESPONDERRORS::INTERNAL_ERROR) {
+					if (resultState == RESPONDERRORS::INVALID_DATA) std::cout << "Invalid data\n";
+					else std::cout << "Internel error\n";
 					if (msg) delete[] msg;
 					unsigned long decode[] = {
 						ASNObject::EncodingSize(NM_FAILED),

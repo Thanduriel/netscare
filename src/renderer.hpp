@@ -8,6 +8,7 @@
 #include <d3d11.h>
 #include <cassert>
 #include <CommonStates.h>
+#include <filesystem>
 
 class Device 
 {
@@ -24,6 +25,7 @@ public:
 
 	static const DirectX::CommonStates* GetCommonStates() { return m_commonStates; }
 
+	static void SetResourcePath(const std::filesystem::path& _path) { m_resourcePath = _path; }
 	static void SetHWND(HWND _handle) { m_windowHandle = _handle; }
 	static void SetPipeNode(const PipeNode& node) { m_pipeNode = node; };
 
@@ -31,7 +33,7 @@ public:
 private:
 	static void Draw();
 	static void InitializeParent(IDXGISwapChain* _this);
-	
+
 	// d3d11 environment
 	static ID3D11Device* m_device;
 	static ID3D11DeviceContext* m_context;
@@ -43,6 +45,8 @@ private:
 	static const DirectX::CommonStates* m_commonStates;
 	static const Effect* m_effect;
 	static const Texture* m_texture;
+
+	static std::filesystem::path m_resourcePath;
 
 	// hook related
 	static DWORD_PTR* m_swapChainVtable;

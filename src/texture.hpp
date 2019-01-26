@@ -11,7 +11,7 @@ class Texture
 public:
 	// p1 lower left
 	// p2 upper right
-	Texture(ID3D11Device* _d3dDevice, WCHAR* _file, float _x1, float _y1, 
+	Texture(ID3D11Device* _d3dDevice, const WCHAR* _file, float _x1, float _y1, 
 		float _scaleX = 1.f, float _scaleY = 1.f);
 	Texture(ID3D11Device* _d3dDevice, const uint8_t* _data, size_t _dataSize, float _x1, float _y1,
 		float _scaleX = 1.f, float _scaleY = 1.f);

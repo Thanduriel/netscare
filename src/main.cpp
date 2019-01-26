@@ -2,6 +2,7 @@
 #include "hook.hpp"
 #include "interface.hpp"
 #include "PipeServer.hpp"
+#include "utils.hpp"
 
 #include <windows.h>
 #include <stdio.h>
@@ -130,6 +131,15 @@ BOOL APIENTRY DllMain(HANDLE hModule,
 	if (ul_reason_for_call == DLL_PROCESS_ATTACH)
 	{
 		std::cout << "attached dll" << std::endl;
+		
+		// set resource path
+		TCHAR szPath[MAX_PATH];
+		GetModuleFileNameA((HMODULE)hModule, szPath, MAX_PATH);
+		std::filesystem::path path(szPath);
+		path.remove_filename();
+		Device::SetResourcePath(path);
+		Utils::InitLogger(path / "log.txt");
+
 		hDll = (HINSTANCE)hModule;
 		::DisableThreadLibraryCalls(hDll);
 
@@ -180,11 +190,6 @@ LRESULT HookProc(
 		Device::SetPipeNode(PipeNode(pips.hIn, pips.hOut));
 		PVOID pV = pCDS->lpData;
 		char meassage[255] = "test3\n1\n";
-		DWORD written;
-		if (!ReadFile(pips.hIn, meassage, 255, &written, NULL)
-			|| !WriteFile(pips.hOut, meassage + 2, 253, &written, NULL) ) {
-			showError("PipeWriteClient Error", GetLastError());
-		}
 	}
 	else if (pCW->message == WM_HOOKEX)
 	{
@@ -206,22 +211,6 @@ END:
 	return ::CallNextHookEx(g_hHook, code, wParam, lParam);
 }
 COPYDATASTRUCT mCDS;
-struct WindowData {
-	unsigned long pid;
-	HWND hWnd;
-};
-BOOL isMainHandle(HWND handle) {
-	return GetWindow(handle, GW_OWNER) == (HWND)0 && IsWindowVisible(handle);
-}
-BOOL CALLBACK find_window_callback(HWND handle, LPARAM lParam) {
-	WindowData& wnd = *reinterpret_cast<WindowData*>(lParam);
-	unsigned long pid;
-	GetWindowThreadProcessId(handle, &pid);
-	if (wnd.pid != pid || !isMainHandle(handle))
-		return TRUE;
-	wnd.hWnd = handle;
-	return FALSE;
-}
 int InjectDll(HWND hWnd, HANDLE hIn, HANDLE hOut)
 {
 	g_hWnd = hWnd;
@@ -239,13 +228,9 @@ int InjectDll(HWND hWnd, HANDLE hIn, HANDLE hOut)
 	mCDS.dwData = PIPES;
 	mCDS.cbData = sizeof(Pipes);
 	mCDS.lpData = &pips;
-	WindowData myWnd;
-	myWnd.pid = GetCurrentProcessId();
-	EnumWindows(find_window_callback, (LPARAM)&myWnd);
-	SetWindowTextA(myWnd.hWnd, "Search");
-	SetWindowTextA(hWnd, "Target");
-	std::cout << "pid:" << myWnd.pid << "\thWnd:" << myWnd.hWnd << '\n';
-	SendMessage(hWnd, WM_COPYDATA, (WPARAM)(HWND)myWnd.hWnd, (LPARAM)(LPVOID)&mCDS);
+	
+	const HWND handle = Utils::GetProcessWindow(GetCurrentProcessId());
+	SendMessage(hWnd, WM_COPYDATA, (WPARAM)(HWND)handle, (LPARAM)(LPVOID)&mCDS);
 	SendMessage(hWnd, WM_HOOKEX, 0, 1);
 	return g_isHooked;
 }

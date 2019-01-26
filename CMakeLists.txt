@@ -42,15 +42,21 @@ list(REMOVE_ITEM DIRECTXTK_SOURCES "${CMAKE_SOURCE_DIR}/dependencies/DirectXTK/S
 add_library(directXTK STATIC ${DIRECTXTK_SOURCES})
 add_library(directXTex STATIC ${DIRECTXTex_SOURCE})
 
+# the actual rendering hook
 add_library(netscare SHARED ${SOURCE_FILES})
 target_link_libraries(netscare d3d11)
 target_link_libraries(netscare directXTK)
 
 add_executable(server ${SERVER_FILES})
 
+# program that monitors the system and injects netscare into viable programs
 add_executable(injector ${INJECTOR_FILES} src/PipeServer.hpp src/PipeServer.cpp src/utils.cpp src/utils.hpp server/Messages.hpp server/Types.hpp server/Types.cpp server/Asn.hpp server/Asn.cpp)
 target_link_libraries(injector netscare)
 target_link_libraries(injector directXTex)
 set_property(TARGET injector PROPERTY WIN32_EXECUTABLE true)
 
+# application with a d3d11 device
 add_executable(demo WIN32 demo/X11FullScreen.cpp)
+
+#spdlog
+include_directories("dependencies/spdlog/include")

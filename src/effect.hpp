@@ -7,7 +7,7 @@
 class Effect 
 {
 public:
-	Effect(ID3D11Device* _device, WCHAR* _vsFilename, WCHAR* _psFilename);
+	Effect(ID3D11Device* _device, const WCHAR* _vsFilename, const WCHAR* _psFilename);
 	~Effect();
 
 	ID3D11VertexShader* GetVertexShader() const { return m_vertexShader; }

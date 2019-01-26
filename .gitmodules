@@ -1,3 +1,9 @@
 [submodule "dependencies/DirectXTK"]
 	path = dependencies/DirectXTK
 	url = git@github.com:Microsoft/DirectXTK.git
+[submodule "dependencies/DirectXTex"]
+	path = dependencies/DirectXTex
+	url = git@github.com:Microsoft/DirectXTex.git
+[submodule "dependencies/spdlog"]
+	path = dependencies/spdlog
+	url = git@github.com:gabime/spdlog.git

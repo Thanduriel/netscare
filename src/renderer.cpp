@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include "utils.hpp"
+
 #include <iostream>
 #include <windows.h>
 #include <stdio.h>
@@ -16,9 +17,11 @@ const Effect* Device::m_effect = nullptr;
 const Texture* Device::m_texture = nullptr;
 
 HWND Device::m_windowHandle = 0;
+std::filesystem::path Device::m_resourcePath;
 
 DWORD_PTR* Device::m_swapChainVtable = nullptr;
 D3D11PresentHook Device::m_orgPresent = nullptr;
+static std::filesystem::path m_resourcePath;
 
 PipeNode Device::m_pipeNode{};
 
@@ -150,21 +153,17 @@ void Device::Draw()
 
 void Device::InitializeParent(IDXGISwapChain* _this)
 {
+	Utils::Log().info("Initializing device");
 	//GET DEVICE
 	_this->GetDevice(__uuidof(ID3D11Device), (void**)&m_device);
 
 	//CHECKING IF DEVICE IS VALID
-	cout << "New m_pDevice:			0x" << hex << m_device << endl;
 	if (!m_device) return;
 
 	//REPLACING CONTEXT
 	m_device->GetImmediateContext(&m_context);
 
-	//CHECKING IF CONTEXT IS VALID
-	cout << "New m_context:			0x" << hex << m_context << endl;
 	if (!m_context) return;
-
-	cout << "" << endl;
 
 	m_device->Release();
 	m_context->Release();
@@ -176,8 +175,11 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 	pBackBuffer->Release();
 
 	m_commonStates = new DirectX::CommonStates(m_device);
-	Effect* effect = new Effect(m_device,L"../shader/texture.vs",L"../shader/texture.ps");
-	
-	m_texture = new Texture(m_device,L"../texture/bolt.dds", -0.5f, -0.5f, 0.5f, 0.5f);
+
+	const auto vs = m_resourcePath / L"../../shader/texture.vs";
+	const auto ps = m_resourcePath / L"../../shader/texture.ps";
+	Effect* effect = new Effect(m_device, vs.wstring().c_str(),ps.wstring().c_str());
+
+	m_texture = new Texture(m_device, (m_resourcePath / L"../../texture/bolt.dds").wstring().c_str(), -0.5f, -0.5f, 0.5f, 0.5f);
 	SetEffect(*effect);
 }

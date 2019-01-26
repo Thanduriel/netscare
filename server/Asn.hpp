@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <ostream>
 #include <vector>
+#include <cassert>
 
 class Command;
 
@@ -24,11 +25,18 @@ private:
 	static constexpr void EncodeLen(unsigned long len, unsigned char* msg);
 public:
 	TYPE GetType() const { return type; }
+	struct ASNDecodeReturn {
+		ASNDecodeReturn(const ASNObject* obj, std::uint8_t len) : objects{ obj }, len{ len } {}
+		const ASNObject* objects;
+		std::uint8_t len;
+		operator const ASNObject* () const { return objects; }
+	};
 	const wchar_t* DecodeUTF8() const;
 	long DecodeInteger() const;
 	const char* DecodeString() const;
 	const unsigned char* GetRaw() const;
 	bool DecodeBool() const;
+	ASNObject::ASNDecodeReturn DecodeASNObjscets() const;
 	static unsigned long EncodeHeaderSize(unsigned long dataSize);
 	static unsigned long GetSize(const unsigned char *data);
 	unsigned long GetSize() const { return len + headerSize; }
@@ -37,15 +45,9 @@ public:
 	ASNObject();
 	ASNObject(const unsigned char* data, std::uint8_t deep);
 	~ASNObject() {
-		if (type == SEQUENCE) delete[] reinterpret_cast<const ASNObject*>(data);
+		// if (type == SEQUENCE) delete[] reinterpret_cast<const ASNObject*>(data);
 	}
 	friend std::ostream& operator <<(std::ostream& os, const ASNObject& obj);
-	struct ASNDecodeReturn {
-		ASNDecodeReturn(ASNObject* obj, std::uint8_t len) : objects{ obj }, len{ len } {} 
-		ASNObject* objects;
-		std::uint8_t len;
-		operator ASNObject* () { return objects; }
-	};
 	static ASNDecodeReturn DecodeAsn(const unsigned char* data, unsigned long size, std::uint8_t deep = 0);
 	static unsigned long EncodingSize(const std::vector<unsigned char>& data);
 	static const unsigned char* EncodeAsnPrimitives(const std::vector<unsigned char>& data, unsigned char* destionation = nullptr);

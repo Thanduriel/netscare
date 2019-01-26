@@ -41,6 +41,7 @@ class Client {
 
 	std::vector<Address>& _addresses;
 	std::vector<std::unique_ptr<Command>> _commandQueue;
+	bool SendPicture(ScareEventCp& eventCp);
 public:
 	Client(std::vector<Address>& addresses, const char* hostname = "localhost", unsigned int port = 9090) : _userId{ 0 }, _bLogIn{ false }, _addresses{ addresses} {
 		_hIntSession = InternetOpenA(_T("Client"), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
@@ -52,7 +53,7 @@ public:
 	}
 	bool IsOnline() { return _bLogIn; }
 	bool Login(const wchar_t* username);
-	bool SendPicture(ScareEventCp& eventCp);
+	bool AddEvent(ScareEventCp& eventCp);
 	void TriggerEvent(int eventId) { _commandQueue.emplace_back(std::make_unique<TriggerEventCommand>(eventId)); }
 	bool Update();
 	bool SearchServer(std::vector<std::string>);

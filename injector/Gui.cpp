@@ -528,13 +528,15 @@ LRESULT CALLBACK QueueWinProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	}	break;
 	case COM_EXECUTE_EVENT: {
 		if (pState->hEvents.size() == 0) {
-			MessageBox(NULL, "No events in this queu", "cant trigger Event", MB_OK |MB_ICONERROR);
+			MessageBox(NULL, "No events in this queu", "cant trigger Event", MB_OK | MB_ICONERROR);
 			break;
 		}
 		HWND hEvent = (pState->hEvents[0]);
 		EventWinState *eState = reinterpret_cast<EventWinState*>(GetWindowLongPtrW(hEvent, GWLP_USERDATA));
 		if (eState->evState == ScareEvent::SETTET) {
 			PostMessageA(NULL, WM_TRIGGEREVENT, eState->id, (LPARAM)hWnd);
+		} else if (eState->evState == ScareEvent::TRIGGERD) {
+			MessageBox(NULL, "Event on the way", "Chill", MB_OK);
 		} else {
 			MessageBox(NULL, "Filed is still loading", "Cant Trigger Event Now", MB_OK | MB_ICONERROR);
 		}
@@ -610,6 +612,7 @@ LRESULT CALLBACK EventWinPro(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 	case WM_COMMAND: com = wParam; break;
 	case WM_REFRESH: 
 		if (pState->evState == ScareEvent::SETTET) SetWindowTextW(pState->hState, L"R");
+		else if (pState->evState == ScareEvent::TRIGGERD) SetWindowTextW(pState->hState, L"T");
 		else if (pState->evState == ScareEvent::EXECUTED) PostMessage(hWnd, WM_COMMAND, COM_CLOSE, NULL);
 	break;
 	default:

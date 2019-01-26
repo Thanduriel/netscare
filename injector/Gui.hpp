@@ -112,7 +112,7 @@ class ScareEvent {
 	bool hasCp;
 	HWND handle{ NULL };
 public:
-	enum STATE { NOT, WILLSET, SETTET, EXECUTED } evState{ NOT };
+	enum STATE { NOT, WILLSET, SETTET, TRIGGERD, EXECUTED } evState{ NOT };
 	void setHandle(HWND hwnd) {
 		handle = hwnd;
 	}

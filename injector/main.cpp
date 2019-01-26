@@ -104,9 +104,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		TaskQueue(const Action& action, std::unique_ptr<Task<unsigned char*>>task) : type{ action.type }, task { std::move(task) } {}
 	};
 	std::vector<Address> addresses;
-	addresses.push_back(Address(L"Jörgen", 1, 1));
-	addresses.push_back(Address(L"YOLO", 2, 8));
-	addresses.push_back(Address(L"HanHan", 23, 1));
 	std::vector<TaskQueue> actions;
 	std::size_t pos = 0;
 	unsigned char _msg[] = {255, 255, 0, 255};
@@ -117,7 +114,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	Client client{addresses};
 
 	Gui gui(hInst, addresses);
-
+	clock_t start = clock();
 	bool run = true;
 	while (run) {
 		if (pos < actions.size()) {
@@ -129,6 +126,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 			}
 			else if (sc == Task<unsigned char*>::FAILED || sc == Task<unsigned char*>::ERROR_TO_SHORT) ++pos;
 		}
+
 		Action action = gui.update();
 		switch (action.type) {
 		case Action::LOGIN: {
@@ -145,19 +143,26 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		case Action::EV_SETUP: {
 			ScareEvent * scareEv = reinterpret_cast<ScareEvent*>(action.data);
 			events.emplace_back( scareEv );
-			client.SendPicture(events.back());
+			client.AddEvent(events.back());
 		}	break;
 		case Action::EV_UPADTE: {
 			int eventId = *reinterpret_cast<int*>(action.data);
 			for (ScareEventCp& e : events) {
 				if (e.id == eventId) {
-					client.SendPicture(e);
+					// client.SendPicture(e); TODO: stuff
 					break;
 				}
 			}
 		}	break;
-		case Action::EV_TRIGGER:
-			client.TriggerEvent(*reinterpret_cast<int*>(action.data));
+		case Action::EV_TRIGGER: {
+			int eId = *reinterpret_cast<int*>(action.data);
+			client.TriggerEvent(eId);
+			for (ScareEventCp& ev : events) {
+				if (ev.id == eId) {
+					ev.changeState(ScareEvent::TRIGGERD);
+				}
+			}
+
 			/* int id = *reinterpret_cast<int*>(action.data);
 			for (auto itr = events.begin(); itr != events.end(); ++itr) {
 				if (itr->id == id && itr->isValid()) {
@@ -168,7 +173,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 					break;
 				}
 			}*/
-			break;
+		}	break;
 		case Action::SETCOLOR:
 			actions.push_back(TaskQueue(
 				std::move(action),
@@ -179,6 +184,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		case Action::CLOSE:
 			run = false;
 			break;
+		}
+		if (((clock() - start) / CLOCKS_PER_SEC) > 1.f) {
+			client.Update();
+			start = clock();
 		}
 	}
 

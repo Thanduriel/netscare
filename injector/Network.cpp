@@ -99,7 +99,7 @@ bool Client::SendPicture(ScareEventCp& eventCp) {
 			return false;
 		}
 
-		ASNObject *itr, *asn = ASNObject::DecodeAsn(res.data(), res.size());
+		const ASNObject *itr,*asn = ASNObject::DecodeAsn(res.data(), res.size());
 		itr = asn;
 		int i = 0;
 		for (unsigned long pos = 0; pos < res.size(); pos += itr->GetSize(), ++itr, ++i) {
@@ -132,6 +132,14 @@ bool Client::SendPicture(ScareEventCp& eventCp) {
 	return false;
 } 
 
+bool Client::AddEvent(ScareEventCp& eventCp) {
+	if (!SendPicture(eventCp)) return false;
+	auto itr = _mapPicId.find(eventCp.file);
+	if (itr == _mapPicId.end()) return false;
+	_commandQueue.emplace_back(std::make_unique<AddEventCommand>(static_cast<std::uint8_t>(eventCp.target), itr->second, eventCp.id));
+	return true;
+}
+
 bool Client::Login(const wchar_t* username) {
 	if (_bLogIn) {
 		MessageBox(NULL, "You Already Login", "User Error", MB_OK | MB_ICONWARNING);
@@ -153,9 +161,9 @@ bool Client::Login(const wchar_t* username) {
 		return false;
 	}
 	
-	ASNObject *itr;
+	const ASNObject *itr;
 	ASNObject::ASNDecodeReturn asn = ASNObject::DecodeAsn(res.data(), res.size());
-	itr = asn;
+	itr = asn.objects;
 	int id = 0;
 	enum STATE { CHECK, FAILED, SUCCESS, DEFECT } state = CHECK;
 	for (unsigned long pos = 0; pos < res.size(); pos += itr->GetSize(), ++itr, ++id) {
@@ -191,16 +199,21 @@ bool Client::Login(const wchar_t* username) {
 }
 
 bool Client::Update() {
-	return false; // TODO fix
 	if (!_bLogIn) return false;
 	unsigned long len = 0,
-		offset = ASNObject::EncodingSize(NM_UPDATE);
-	len += offset;
-	len += ASNObject::EncodingSize(_commandQueue);
+		offset[] = {
+			ASNObject::EncodingSize(NM_UPDATE),
+			ASNObject::EncodingSize(_userId)
+		};
+	len += offset[0] + offset[1];
+	if (!_commandQueue.empty())
+		len += ASNObject::EncodingSize(_commandQueue);
 	
 	std::vector<unsigned char> szReq(len);
 	ASNObject::EncodeAsnPrimitives(NM_UPDATE, szReq.data());
-	ASNObject::EncodeSequence(_commandQueue, szReq.data() + offset);
+	ASNObject::EncodeAsnPrimitives(_userId, szReq.data() + offset[0]);
+	if (!_commandQueue.empty())
+		ASNObject::EncodeSequence(_commandQueue, szReq.data() + offset[0] + offset[1]);
 
 	if (!MakeRequest(szReq, szReq)) {
 		MessageBox(NULL, "Requet Faield", "NetworkError", MB_OK | MB_ICONERROR);
@@ -208,5 +221,6 @@ bool Client::Update() {
 	}
 
 	// TODO:: repond handling
+	_commandQueue.resize(0);
 	return true;
 }

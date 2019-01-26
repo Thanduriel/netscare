@@ -14,7 +14,7 @@ ASNObject::ASNObject(const unsigned char* data, std::uint8_t deep) : len{ 0 }, d
 	}	break;
 	case INTEGER: if (len > sizeof(long)) throw ASNERRORS(MAXINTEGERSIZE); break;
 	case SEQUENCE:
-		this->data = reinterpret_cast<unsigned char*>(DecodeAsn(this->data, len, deep + 1).objects);
+		this->data = reinterpret_cast<const unsigned char*>(DecodeAsn(this->data, len, deep + 1).objects);
 		break;
 	}
 }
@@ -64,6 +64,18 @@ constexpr void ASNObject::EncodeLen(unsigned long len, unsigned char* msg) {
 const wchar_t* ASNObject::DecodeUTF8() const {
 	if (type != TYPE::UTF8String) throw ASNERRORS(WRONGTYPE);
 	return reinterpret_cast<const wchar_t*>(data);
+}
+ASNObject::ASNDecodeReturn ASNObject::DecodeASNObjscets() const {
+	if (type != TYPE::SEQUENCE) throw ASNERRORS(WRONGTYPE);
+	const ASNObject *res, *itr = reinterpret_cast<const ASNObject*>(data);
+	res = itr;
+	unsigned pos = 0, amt = 0;
+	while(pos < len) {
+		pos += itr->GetSize();
+		++itr;
+		++amt;
+	}
+	return ASNDecodeReturn(res, amt);
 }
 long ASNObject::DecodeInteger() const {
 	if (type != TYPE::INTEGER) throw ASNERRORS(WRONGTYPE);
@@ -198,13 +210,20 @@ unsigned char* ASNObject::EncodeAsnPrimitives(const wchar_t* msg, unsigned char*
 }
 
 unsigned long ASNObject::EncodingSize(const std::vector<std::unique_ptr<Command>>& commands) {
-	unsigned long len = 0;
-	for (const std::unique_ptr<Command>& c : commands) len += c->EncodeSize();
+	unsigned long len = 0, b;
+	for (const std::unique_ptr<Command>& c : commands) {
+		b = c->EncodeSize();
+		len += b + EncodeHeaderSize(b);
+	}
 	return 1 + EncodeLenSize(len) + len;
 }
 const unsigned char* ASNObject::EncodeSequence(std::vector<std::unique_ptr<Command>> const& commands, unsigned char* destination) {
-	unsigned long len = 0;
-	for (const std::unique_ptr<Command>& c : commands) len += c->EncodeSize();
+	unsigned long len = 0, b;
+	for (const std::unique_ptr<Command>& c : commands) {
+		b = c->EncodeSize();
+		len += b + EncodeHeaderSize(b);
+	}
+
 	const unsigned long header = 1 + EncodeLenSize(len);
 	unsigned char* res;
 	if (destination) res = destination;
@@ -215,9 +234,14 @@ const unsigned char* ASNObject::EncodeSequence(std::vector<std::unique_ptr<Comma
 	EncodeLen(len, res + 1);
 	unsigned char* p = res + header;
 	for (const std::unique_ptr<Command>& c : commands) {
+		*p = TYPE::SEQUENCE;
+		b = c->EncodeSize();
+		EncodeLen(b, ++p);
+		p += EncodeLenSize(b);
 		c->Encode(p);
-		p += c->EncodeSize();
+		p += b;
 	}
+	assert(p - res == len + header);
 	return res;
 }
 

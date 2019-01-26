@@ -64,9 +64,17 @@ private:
 		PHTTP_REQUEST pRequest
 	);
 	std::vector<User>& _users;
+	struct CommandHis {
+		std::unique_ptr<Command> command;
+		std::uint8_t target;
+		std::uint8_t src;
+		CommandHis(std::unique_ptr<Command>&& cmd, std::uint8_t targte, std::uint8_t src) : command{ std::move(cmd) }, target{ targte }, src{ src } {}
+	};
+	std::vector<CommandHis> _commandHistory;
 	RESPONDERRORS CalculationRespond(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
 	RESPONDERRORS LoginResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
 	RESPONDERRORS LoadPictureResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
+	RESPONDERRORS UpdateStateResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len);
 public:
 	NetScareServer(int urlC, wchar_t **urls, std::vector<User>& users);
 	~NetScareServer();
@@ -89,8 +97,10 @@ constexpr static unsigned long myStrLen(const char* str) {
 }
 
 
-constexpr const char* MSG_USEREXIST = "Username already taken!";
-constexpr const char* MSG_NOTIMPLEMENTED = "Function ont Avalible now!";
-constexpr const char* MSG_INVALIDDATA = "Requets is not well fromed!";
-constexpr const char* MSG_INTERNELERROR = "Server Error, sporry";
+constexpr char* MSG_USEREXIST = "Username already taken!";
+constexpr char* MSG_NOTIMPLEMENTED = "Function ont Avalible now!";
+constexpr char* MSG_INVALIDDATA = "Requets is not well fromed!";
+constexpr char* MSG_INTERNELERROR = "Server Error, sporry";
+constexpr char* MSG_UNKNOWNUSER = "UserId is not Registerd!";
+constexpr char* MSG_UNNOKNCOMMAND = "Cannot interpret Command!";
 // constexpr const unsigned char *ASN_FAILED = ASNObject::EncodeAsnPrimitives("failed");

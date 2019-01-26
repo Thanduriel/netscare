@@ -34,6 +34,7 @@ class User {
 	std::wstring name;
 	static int num;
 	std::size_t ecexuted;
+	std::vector<std::pair<std::uint8_t, std::uint8_t>> _pics;
 	std::vector<Event> events;
 	std::vector<Event::STATE> states;
 public:
@@ -42,27 +43,33 @@ public:
 	User(const char* name);
 	const std::wstring& GetName() const;
 	void AddEvent(std::uint8_t target, std::uint8_t picId, std::uint8_t id, bool picLoaded);
+	const Event& GetEvent(std::uint8_t id) { 
+		if (id >= events.size()) MessageBoxA(NULL, "NOT GOOD", "out of bound"; MB_OK | MB_ICONERROR);
+		return events[id]; 
+	}
 	void UpdatePic(std::uint8_t picId);
 	void LoadPic(std::uint8_t picId);
 };
 
 class Command {
 public:
-	enum TYPE { TRIGGEREVENT, ADD_USER, DOWNLAOD_PIC };
+	enum TYPE { TRIGGEREVENT, ADD_USER, DOWNLAOD_PIC, ADDEVENT };
 	enum DECODERESULT { DECODED, CORRUPTED };
 	TYPE GetType() const { return _type; }
 	DECODERESULT GetState() const { return _decodeState; }
 	virtual unsigned long EncodeSize() { return 0; };			// return Space for Encoding
 	virtual void Encode(unsigned char* msg) {};	// encodes in space
-	static std::unique_ptr<Command> Decode(ASNObject::ASNDecodeReturn& asn);
+	static std::unique_ptr<Command> Decode(const ASNObject::ASNDecodeReturn& asn);
 	Command(TYPE type) : _type{ type }, _decodeState{ CORRUPTED } {}
 protected:
 	unsigned long _size{ 0 };
 	static constexpr char * const IDENTIFYER[] = {
 		"triggerEvent",
 		"addUser",
-		"downloadPic"
+		"downloadPic",
+		"addEvent"
 	};
+	Command(TYPE type, bool state) : _type{ type }, _decodeState{ state ? DECODED : CORRUPTED } {}
 	DECODERESULT _decodeState;
 private:
 	TYPE _type;
@@ -73,7 +80,25 @@ class TriggerEventCommand : public Command {
 	int _eventId;
 	unsigned long _idSize{ 0 };
 public:
-	TriggerEventCommand(int eventId) : Command{ TRIGGEREVENT }, _eventId{ eventId } {}
+	TriggerEventCommand(int eventId) : Command{ TRIGGEREVENT, true }, _eventId{ eventId } {}
+	int GetEventId() const { return _eventId; }
+	unsigned long EncodeSize() override;
+	void Encode(unsigned char* msg) override;
+};
+
+class AddEventCommand : public Command{
+	std::uint8_t _target;
+	std::uint8_t _pId;
+	int _eventId;
+	unsigned long _idSize{ 0 };
+public:
+	struct Event {
+		Event(std::uint8_t targte, std::uint8_t pId, int eventId) : target{ target }, pId{ pId }, eventId{ eventId } {}
+		std::uint8_t target, pId;
+		int eventId;
+	};
+	Event GetEvent() { return Event(_target, _pId, _eventId); }
+	AddEventCommand(std::uint8_t target, std::uint8_t pId, int eventId) : Command{ ADDEVENT, true }, _target{ target }, _pId{ pId }, _eventId{ eventId } {}
 	unsigned long EncodeSize() override;
 	void Encode(unsigned char* msg) override;
 };
@@ -84,7 +109,7 @@ class AddUserCommand : public Command {
 	unsigned long _idSize{ 0 };
 	static constexpr unsigned long _numSize{ 3 };
 public:
-	AddUserCommand(const wchar_t* username, std::uint8_t id) : Command{ ADD_USER }, _id{ id }{
+	AddUserCommand(const wchar_t* username, std::uint8_t id) : Command{ ADD_USER, true }, _id{ id }{
 		wcscpy_s(_username, username);
 	}
 	unsigned long EncodeSize() override;
@@ -97,7 +122,7 @@ class LoadPictureCommand : public Command {
 	unsigned char* _data;
 	unsigned long _idSize{ 0 }, _size{ 0 };
 public:
-	LoadPictureCommand(const char* fileName) : Command{ DOWNLAOD_PIC }, _data { nullptr } {
+	LoadPictureCommand(const char* fileName) : Command{ DOWNLAOD_PIC, true }, _data { nullptr } {
 		strcpy_s(_fileName, fileName);
 		std::fstream file(fileName, std::ios::binary | std::ios::app);
 		std::streamoff off = file.tellg();

@@ -1,3 +1,5 @@
+#include <io.h>
+
 #include "Network.hpp"
 
 namespace fs = std::filesystem;
@@ -261,6 +263,75 @@ NetScareServer::RESPONDERRORS NetScareServer::LoginResponde(const ASNObject::ASN
 	return RESPONDERRORS::SUCCEESS;
 }
 
+NetScareServer::RESPONDERRORS NetScareServer::UpdateStateResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len) {
+	if (asn.len != 3
+		|| asn.objects[1].GetType() != ASNObject::INTEGER
+		|| asn.objects[2].GetType() != ASNObject::SEQUENCE) return RESPONDERRORS::INVALID_DATA;
+	int uId = asn.objects[1].DecodeInteger();
+	// check if user Exist
+	bool findUser = false;
+	for (const User& u : _users) {
+		if (u.id == uId) {
+			findUser = true;
+			break;
+		}
+	}
+	if (findUser) {
+		ASNObject::ASNDecodeReturn commands = asn.objects[2].DecodeASNObjscets();
+		for(unsigned long i = 0; i < commands.len; ++i) {
+			if (commands.objects[i].GetType() != ASNObject::SEQUENCE) return RESPONDERRORS::INVALID_DATA;
+			std::unique_ptr<Command> cmd = Command::Decode(commands.objects[i].DecodeASNObjscets());
+ 			if (cmd->GetState() == Command::DECODERESULT::CORRUPTED) return RESPONDERRORS::INVALID_DATA;
+			switch (cmd->GetType()) {
+			case Command::TYPE::TRIGGEREVENT: {
+				TriggerEventCommand * tcd = dynamic_cast<TriggerEventCommand*>(cmd.get());
+				if (!tcd) std::cout << "Failed to Tecode TriggerEvent!\n";
+				else {
+					int eId = tcd->GetEventId();
+					if (uId >= _users.size()) std::cout << "UnknownUser Id " << static_cast<int>(uId) << "\n";
+					_commandHistory.emplace_back(std::move(cmd), _users[uId].GetEvent(eId).target, uId);
+					std::cout << "Trigger EventId " << eId << " from userId: " << static_cast<int>(uId) << '\n';
+				}
+			} break;
+			case Command::TYPE::ADDEVENT: {
+				AddEventCommand *aec = dynamic_cast<AddEventCommand*>(cmd.get());
+				if (!aec) std::cout << "Failed to Decode AddEvent!\n";
+				else {
+					AddEventCommand::Event ev = aec->GetEvent();
+					_commandHistory.emplace_back(std::move(cmd), ev.target, ev.eventId);
+					char fileName[32];
+					sprintf_s(fileName, "%ud_%ud.dds", uId, ev.pId);
+					_users[uId].AddEvent(ev.target, ev.pId, uId, _access(fileName, 0) == 0);
+					std::cout << "AddEvent: " << ev.eventId << " pId:" << static_cast<int>(ev.pId) << " target: " << static_cast<int>(ev.target) << '\n';
+				}
+			}	break;
+			default: {
+				unsigned long decode[] = {
+					ASNObject::EncodingSize(NM_FAILED),
+					ASNObject::EncodingSize(MSG_UNNOKNCOMMAND)
+				};
+				len = decode[0] + decode[1];
+				msg = new unsigned char[len];
+				ASNObject::EncodeAsnPrimitives(NM_FAILED, msg);
+				ASNObject::EncodeAsnPrimitives(MSG_UNNOKNCOMMAND, msg + decode[0]);
+				return RESPONDERRORS::SUCCEESS;
+			}
+			}
+		}
+	} else {
+		unsigned long decode[] = {
+			ASNObject::EncodingSize(NM_FAILED),
+			ASNObject::EncodingSize(MSG_UNKNOWNUSER)
+		};
+		len = decode[0] + decode[1];
+		msg = new unsigned char[len];
+		ASNObject::EncodeAsnPrimitives(NM_FAILED, msg);
+		ASNObject::EncodeAsnPrimitives(MSG_UNKNOWNUSER, msg + decode[0]);
+	}
+	return RESPONDERRORS::SUCCEESS;
+}
+
+
 NetScareServer::RESPONDERRORS NetScareServer::LoadPictureResponde(const ASNObject::ASNDecodeReturn& asn, OUT unsigned char*& msg, OUT unsigned long& len) {
 	if (asn.len != 4
 		|| asn.objects[1].GetType() != ASNObject::INTEGER
@@ -268,7 +339,7 @@ NetScareServer::RESPONDERRORS NetScareServer::LoadPictureResponde(const ASNObjec
 		|| asn.objects[3].GetType() != ASNObject::OCTASTRING) return RESPONDERRORS::INVALID_DATA;
 	int userId = asn.objects[1].DecodeInteger();
 	int picId = asn.objects[2].DecodeInteger();
-	std::string filename(std::to_string(userId) + '_' + std::to_string(picId) + ".jpg");
+	std::string filename(std::to_string(userId) + '_' + std::to_string(picId) + ".dds");
 	std::cout << "Start load Pictzure: uID: " << userId << "  picId: " << picId << "  filename: " << filename << '\n';
 	std::ofstream file(filename, std::ios::binary);
 	if (file.fail()) { std::cout << "cant open file\n"; return RESPONDERRORS::INTERNAL_ERROR; }
@@ -367,8 +438,10 @@ DWORD NetScareServer::SendHttpPostResponse(
 						resultState = CalculationRespond(asn, msg, len);
 					} else if (strcmp(asn[0].DecodeString(), NM_LOGIN) == 0) {
 						resultState = LoginResponde(asn, msg, len);
-					} else if(strcmp(asn[0].DecodeString(), NM_LOADPIC) == 0) {
+					} else if (strcmp(asn[0].DecodeString(), NM_LOADPIC) == 0) {
 						resultState = LoadPictureResponde(asn, msg, len);
+					} else if (strcmp(asn[0].DecodeString(), NM_UPDATE) == 0){
+						resultState = UpdateStateResponde(asn, msg, len);
 					} else std::cout << "No valid operation: " << asn.objects[0].DecodeString() << '\n';
 				} else std::cout << "Cant resolve Requets No String Type: " << asn.objects[0].GetType() << '\n';
 

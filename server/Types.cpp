@@ -57,9 +57,9 @@ User::User(const char *name) : id{ static_cast<std::uint8_t>(num++) }, events{},
 
 const std::wstring& User::GetName() const { return name; }
 void User::AddEvent(std::uint8_t target, std::uint8_t picId, std::uint8_t id, bool picLoaded) {
-	if (id > events.size()) {
-		events.resize(id);
-		states.resize(id);
+	if (id >= events.size()) {
+		events.resize(id + 1);
+		states.resize(id + 1);
 	}
 	events[id] = Event(target, picId);
 	states[id] = picLoaded ? Event::STATE::PIC_LOADED : Event::STATE::SETTED;
@@ -77,10 +77,10 @@ void User::LoadPic(std::uint8_t picId) {
 	}
 }
 
-std::unique_ptr<Command> Command::Decode(ASNObject::ASNDecodeReturn& asn) {
+std::unique_ptr<Command> Command::Decode(const ASNObject::ASNDecodeReturn& asn) {
 	if (asn.len < 1 || asn.objects[0].GetType() != ASNObject::ASCISTRING) return nullptr;
 	const char* type = asn.objects[0].DecodeString();
-	if (strcmp(type, Command::IDENTIFYER[ADD_USER])) {
+	if (strcmp(type, Command::IDENTIFYER[ADD_USER]) == 0) {
 		if (asn.len != 3
 			|| asn.objects[1].GetType() != ASNObject::UTF8String
 			|| asn.objects[1].GetDataSize() / sizeof(wchar_t) > MAX_NAME
@@ -88,10 +88,18 @@ std::unique_ptr<Command> Command::Decode(ASNObject::ASNDecodeReturn& asn) {
 		int id = asn.objects[2].DecodeInteger();
 		if (id > 255) return std::make_unique<Command>(ADD_USER);
 		return std::make_unique<AddUserCommand>(asn.objects[1].DecodeUTF8(), static_cast<std::uint8_t>(id));
-	} else if (strcmp(type, Command::IDENTIFYER[TRIGGEREVENT])){
+	} else if (strcmp(type, Command::IDENTIFYER[TRIGGEREVENT]) == 0){
 		if (asn.len != 2
 			|| asn.objects[1].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(TRIGGEREVENT);
 		return std::make_unique<TriggerEventCommand>(asn.objects[1].DecodeInteger());
+	} else if (strcmp(type, Command::IDENTIFYER[ADDEVENT]) == 0) {
+		if (asn.len != 4
+			|| asn.objects[1].GetType() != ASNObject::INTEGER
+			|| asn.objects[1].GetDataSize() > 1
+			|| asn.objects[2].GetType() != ASNObject::INTEGER
+			|| asn.objects[2].GetDataSize() > 2
+			|| asn.objects[3].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(ADDEVENT);
+			return std::make_unique<AddEventCommand>(static_cast<std::uint8_t>(asn.objects[3].DecodeInteger()), static_cast<std::uint8_t>(asn.objects[2].DecodeInteger()), asn.objects[1].DecodeInteger());
 	}
 	return nullptr;
 }
@@ -104,7 +112,7 @@ unsigned long AddUserCommand::EncodeSize() {
 }
 
 void AddUserCommand::Encode(unsigned char* msg) {
-	unsigned long offset = _idSize;
+	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
 	ASNObject::EncodeAsnPrimitives(_id, msg + offset);
 	offset += _numSize;
@@ -122,6 +130,23 @@ void TriggerEventCommand::Encode(unsigned char* msg) {
 	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
 	ASNObject::EncodeAsnPrimitives(_eventId, msg + offset);
+}
+
+unsigned long AddEventCommand::EncodeSize() {
+	if (_idSize & _size) return _size;
+	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	_size = _idSize + ASNObject::EncodingSize(_eventId) + ASNObject::EncodingSize(_pId) + ASNObject::EncodingSize(_target);
+	return _size;
+}
+
+void AddEventCommand::Encode(unsigned char* msg) {
+	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
+	ASNObject::EncodeAsnPrimitives(_eventId, msg + offset);
+	offset += ASNObject::EncodingSize(_eventId);
+	ASNObject::EncodeAsnPrimitives(_pId, msg + offset);
+	offset += ASNObject::EncodingSize(_pId);
+	ASNObject::EncodeAsnPrimitives(_target, msg + offset);
 }
 
 unsigned long LoadPictureCommand::EncodeSize() {

@@ -1,5 +1,6 @@
 #include "effect.hpp"
 #include "renderer.hpp"
+#include "utils.hpp"
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
 #include<string>
@@ -8,7 +9,9 @@
 
 #pragma comment(lib,"d3dcompiler.lib")
 
-Effect::Effect(ID3D11Device* _device, WCHAR* _vsFilename, WCHAR* _psFilename)
+using namespace std::string_literals;
+
+Effect::Effect(ID3D11Device* _device, const WCHAR* _vsFilename, const WCHAR* _psFilename)
 {
 	HRESULT result;
 	ID3D10Blob* errorMessage;
@@ -16,6 +19,7 @@ Effect::Effect(ID3D11Device* _device, WCHAR* _vsFilename, WCHAR* _psFilename)
 	errorMessage = nullptr;
 	
 	// Compile the vertex shader code.
+	Utils::Log().info(L"Compiling vertex shader {}", _vsFilename);
 	ID3DBlob *vsBlob = nullptr;
 	HRESULT hr = CompileShader(_vsFilename, "VSMain", "vs_4_0_level_9_1", &vsBlob);
 	if (FAILED(hr))
@@ -23,6 +27,7 @@ Effect::Effect(ID3D11Device* _device, WCHAR* _vsFilename, WCHAR* _psFilename)
 	}
 
 	// Compile the pixel shader code.
+	Utils::Log().info(L"Compiling pixel shader {0}", _psFilename);
 	ID3DBlob *psBlob = nullptr;
 	hr = CompileShader(_psFilename, "PSMain", "ps_4_0_level_9_1", &psBlob);
 	if (FAILED(hr))

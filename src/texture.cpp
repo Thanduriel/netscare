@@ -1,5 +1,6 @@
 #include "texture.hpp"
 #include "renderer.hpp"
+#include "utils.hpp"
 #include <d3d11shader.h>
 #include <DDSTextureLoader.h>
 #include <string>
@@ -7,10 +8,12 @@
 constexpr int VERTEX_COUNT = 4;
 
 using namespace DirectX;
+using namespace std::string_literals;
 
-Texture::Texture(ID3D11Device* _d3dDevice, WCHAR* _file, float _x1, float _y1, 
+Texture::Texture(ID3D11Device* _d3dDevice, const WCHAR* _file, float _x1, float _y1, 
 	float _scaleX, float _scaleY)
 {
+	Utils::Log().info(L"Creating Texture from file: {}",  _file);
 	HRESULT result = DirectX::CreateDDSTextureFromFile(_d3dDevice, _file, &m_texture, &m_textureView);
 	if (FAILED(result))
 	{
@@ -23,6 +26,7 @@ Texture::Texture(ID3D11Device* _d3dDevice, WCHAR* _file, float _x1, float _y1,
 Texture::Texture(ID3D11Device* _d3dDevice, const uint8_t* _data, size_t _dataSize, float _x1, float _y1,
 	float _scaleX, float _scaleY)
 {
+	spdlog::info("Creating Texture from memory");
 	HRESULT result = DirectX::CreateDDSTextureFromMemory(_d3dDevice, _data, _dataSize, &m_texture, &m_textureView);
 	if (FAILED(result))
 	{
@@ -61,6 +65,7 @@ void Texture::Draw(ID3D11DeviceContext* _deviceContext) const
 
 void Texture::CreateBuffer(ID3D11Device* _d3dDevice, float _x1, float _y1, float _scaleX, float _scaleY)
 {
+	spdlog::info("Creating Texture vertex buffer");
 	ID3D11Texture2D* tex = reinterpret_cast<ID3D11Texture2D*>(m_texture);
 	D3D11_TEXTURE2D_DESC desc;
 	tex->GetDesc(&desc);

@@ -7,27 +7,11 @@
 #include "../server/Asn.hpp"
 #include "Network.hpp"
 #include "Gui.hpp"
+#include "scanner.hpp"
 
 HWND hStart;		// handle to start button
 
-void showEror(const char* caption, DWORD error) {
-	LPSTR msg = 0;
-	if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-		NULL,
-		error,
-		0,
-		(LPSTR)&msg, // muss anscheinend so, steht in der Doku
-		0,
-		NULL) == 0) {
-		MessageBox(NULL, "Cant parse Error", caption, MB_OK | MB_ICONERROR);
-		return;
-	}
-	MessageBox(NULL, msg, caption, MB_OK | MB_ICONERROR);
-	if (msg) {
-		LocalFree(msg);
-		msg = 0;
-	}
-}
+#define RUN_DEMO
 
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmdshow)
@@ -47,7 +31,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	si.hStdInput = 0;
 	si.hStdOutput = 0;
 	std::cout << "Build Pipes" << '\n';
-	
+
+#ifdef RUN_DEMO
 	if (!CreateProcess(NULL,   // No module name (use command line)
 		"demo.exe",        // Command line
 		NULL,           // Process handle not inheritable
@@ -67,35 +52,34 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	Sleep(500);
 	
 	WaitForInputIdle(pi.hProcess, 5000);
-	char msg[] = "Hello, World!\n";
-	char ms[17];
-	ms[0] = 'S';
-	ms[16] = 0;
 	HWND hWnd = GetForegroundWindow();
 	if (hWnd == nullptr)
 		return false;
 	DWORD processId;
 	GetWindowThreadProcessId(hWnd, &processId);
 	HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, processId);
-	WriteTask<char*> wT(msg, msg + 16);
-	ReadTask<char*> rT(ms, 16);
-	pipeServer.addTask(pipeId, wT);
-	if (wT.getState(TRUE) == Task<char*>::FAILED) {
-		std::cerr << "Failed To Use Pipe\n";
-	}
-	pipeServer.addTask(pipeId, rT);
+	
 	InjectDll(hWnd, pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
-	std::cout << "Start connectio  test \n";
+#else
+	ProcessScanner scanner;
+	auto it = std::find_if(scanner.begin(), scanner.end(), [](const ProcessInfo& _info) 
+	{
+		return _info.name.find("Tropico") != std::string::npos;
+	});
+
+	if (it != scanner.end())
+	{
+		HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, it->ID);
+		InjectDll(Utils::GetProcessWindow(it->ID), pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
+	}
+	else return 1;
+#endif
+
 	if (!pipeServer.checkConnection(pipeId)) {
 		std::cout << "Can't verifeyd the connection" << '\n';
 	}
 	else {
 		std::cout << "Is connected" << '\n';
-	}
-	if (rT.getState(TRUE) != Task<char*>::STATUS_CODE::SUCCESS) {
-		std::cout << "Failed to Pipe\n";
-	} else {
-		std::cout << "readdaMsg:\n" << ms << " - length - " << rT.ReadBytes() << '\n';
 	}
 
 	struct TaskQueue {

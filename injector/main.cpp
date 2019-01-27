@@ -12,6 +12,8 @@
 HWND hStart;		// handle to start button
 
 // #define RUN_DEMO
+// #define INJECT
+constexpr int PORT = 80;
 
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmdshow)
@@ -32,6 +34,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	si.hStdOutput = 0;
 	std::cout << "Build Pipes" << '\n';
 
+#ifdef INJECT
 #ifdef RUN_DEMO
 	if (!CreateProcess(NULL,   // No module name (use command line)
 		"demo.exe",        // Command line
@@ -61,7 +64,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	
 	InjectDll(hWnd, pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
 #else
-	/* ProcessScanner scanner;
+	ProcessScanner scanner;
 	auto it = std::find_if(scanner.begin(), scanner.end(), [](const ProcessInfo& _info) 
 	{
 		return _info.name.find("Tropico") != std::string::npos;
@@ -72,7 +75,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, it->ID);
 		InjectDll(Utils::GetProcessWindow(it->ID), pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
 	}
-	else return 1; */
+	else return 1;
+#endif
 #endif
 
 	if (!pipeServer.checkConnection(pipeId)) {
@@ -108,7 +112,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		}
 		// MessageBoxA(NULL, ("a"+arg+"b").c_str(), std::to_string(strlen(arg.c_str())).c_str(), MB_OK);
 	}
-	Client client(addresses, arg.c_str(), 9090);
+	Client client(addresses, arg.c_str(), PORT);
 	Gui gui(hInst, addresses);
 	clock_t start = clock();
 	bool run = true;
@@ -159,7 +163,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 				}
 			}
 
-			/* int id = *reinterpret_cast<int*>(action.data);
+			int id = *reinterpret_cast<int*>(action.data);
 			for (auto itr = events.begin(); itr != events.end(); ++itr) {
 				if (itr->id == id && itr->isValid()) {
 					itr->changeState(ScareEvent::EXECUTED);
@@ -168,7 +172,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 					MessageBox(NULL, (std::to_string(itr->target) + "  " + itr->file).c_str(), "Action", MB_OK);
 					break;
 				}
-			}*/
+			}
 		}	break;
 		case Action::SETCOLOR:
 			actions.push_back(TaskQueue(

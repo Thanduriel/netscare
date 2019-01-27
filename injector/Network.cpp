@@ -8,7 +8,8 @@ bool Client::MakeRequest(std::vector<unsigned char>& res, std::vector<unsigned c
 	TCHAR* szHeader = _T("Content-Type: application/asn");
 	
 	if (!HttpSendRequestA(hHttpRequest, szHeader, _tcslen(szHeader), msg.data(), msg.size())) {
-		Utils::ShowError("Erroro when send", GetLastError());
+		DWORD error = GetLastError();
+		Utils::ShowError(std::to_string(error).c_str(), error);
 		// printf("Error when send: %ul", GetLastError());
 		return false;
 	}
@@ -158,7 +159,7 @@ bool Client::Login(const wchar_t* username) {
 	
 	std::vector<unsigned char> res;
 	if (!MakeRequest(res, szReq)) {
-		MessageBox(NULL, "Requet Faield", "NetworkError", MB_OK | MB_ICONERROR);
+		MessageBox(NULL, std::to_string(GetLastError()).c_str(), "NetworkError", MB_OK | MB_ICONERROR);
 		return false;
 	}
 	

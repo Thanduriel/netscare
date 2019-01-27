@@ -11,7 +11,7 @@
 
 HWND hStart;		// handle to start button
 
-#define RUN_DEMO
+// #define RUN_DEMO
 
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmdshow)
@@ -61,7 +61,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	
 	InjectDll(hWnd, pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
 #else
-	ProcessScanner scanner;
+	/* ProcessScanner scanner;
 	auto it = std::find_if(scanner.begin(), scanner.end(), [](const ProcessInfo& _info) 
 	{
 		return _info.name.find("Tropico") != std::string::npos;
@@ -72,7 +72,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		HANDLE process = OpenProcess(PROCESS_DUP_HANDLE, TRUE, it->ID);
 		InjectDll(Utils::GetProcessWindow(it->ID), pipeServer.duplicateHandler(PipeServer::PIPE_IN, pipeId, process), pipeServer.duplicateHandler(PipeServer::PIPE_OUT, pipeId, process));
 	}
-	else return 1;
+	else return 1; */
 #endif
 
 	if (!pipeServer.checkConnection(pipeId)) {
@@ -93,10 +93,22 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 	unsigned char _msg[] = {255, 255, 0, 255};
 
 	std::vector<ScareEventCp> events;
+	std::string arg;
+	int port = 80;
 	wchar_t *username = nullptr;
-
-	Client client{addresses};
-
+	{
+		std::string str = GetCommandLine();
+		int pos = str.find(' ');
+		while (str[++pos] == ' ');
+		int end = str.find(' ', pos);
+		if (end == std::string::npos) arg = str.substr(pos);
+		else {
+			while (str[++end] == ' ');
+			arg = str.substr(pos, end - pos - 1);
+		}
+		// MessageBoxA(NULL, ("a"+arg+"b").c_str(), std::to_string(strlen(arg.c_str())).c_str(), MB_OK);
+	}
+	Client client(addresses, arg.c_str(), 80);
 	Gui gui(hInst, addresses);
 	clock_t start = clock();
 	bool run = true;

@@ -30,7 +30,7 @@ struct Host {
 class Client {
 	HINTERNET _hIntSession;
 	HINTERNET _hHttpSession;
-	bool MakeRequest(std::vector<unsigned char>& res, std::vector<unsigned char>& msg, const char* subPage = "test1/");
+	bool MakeRequest(std::vector<unsigned char>& res, std::vector<unsigned char>& msg, const char* subPage = "/");
 	unsigned int _userId;
 	bool _bLogIn;
 	std::unordered_map<std::string, std::uint8_t> _mapPicId;

@@ -108,7 +108,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE prevInstanc, LPSTR args, int ncmds
 		}
 		// MessageBoxA(NULL, ("a"+arg+"b").c_str(), std::to_string(strlen(arg.c_str())).c_str(), MB_OK);
 	}
-	Client client(addresses, arg.c_str(), 80);
+	Client client(addresses, arg.c_str(), 9090);
 	Gui gui(hInst, addresses);
 	clock_t start = clock();
 	bool run = true;

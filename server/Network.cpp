@@ -304,7 +304,7 @@ NetScareServer::RESPONDERRORS NetScareServer::UpdateStateResponde(const ASNObjec
 						}
 						_commandHistory.emplace_back(std::move(cmd), _users[uId].GetEvent(eId).target, uId);
 						_commandHistory.emplace_back(std::make_unique<ExecutedCommand>(eId), uId, uId);
-						std::cout << "Trigger EventId " << eId << " from userId: " << static_cast<int>(uId) << '\n';
+						std::cout << "Trigger EventId " << eId << " from userId: " << static_cast<int>(uId) << "to target: " << static_cast<int>(_users[uId].GetEvent(eId).target) << '\n';
 					}
 				} break;
 				case Command::TYPE::ADDEVENT: {
@@ -316,8 +316,9 @@ NetScareServer::RESPONDERRORS NetScareServer::UpdateStateResponde(const ASNObjec
 						char fileName[32];
 						sprintf_s(fileName, "%d_%d.dds", uId, ev.pId);
 						bool ac = _access(fileName, 0) == 0;
-						_users[uId].AddEvent(ev.target, ev.pId, uId, ac);
+						_users[uId].AddEvent(ev.target, ev.pId, ev.eventId, ac);
 						if (ac) {
+							std::cout << "\nLoadPictureCommadn:\tfrom: "<< static_cast<int>(ev.target) << " from " << uId << "\n";
 							_commandHistory.emplace_back(std::make_unique<LoadPictureCommand>(fileName), ev.target, uId);
 							std::cout << "Chained File\n";
 						}

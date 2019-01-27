@@ -164,9 +164,9 @@ void AddEventCommand::Encode(unsigned char* msg) const {
 }
 
 bool LoadPictureCommand::SavePicture(fs::path path) {
-	path /= _fileName;
-	path = fs::absolute(path);
-	MessageBox(NULL, path.string().c_str(), "Download File", MB_OK | MB_ICONINFORMATION);
+	fs::path pA = path / _fileName;
+	path = fs::absolute(pA);
+	
 	std::ofstream file(path.string(), std::ios::binary);
 	if (file.fail()) return false;
 	file.write(reinterpret_cast<const char*>(_data), _fileSize);

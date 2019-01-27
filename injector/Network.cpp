@@ -138,7 +138,9 @@ bool Client::AddEvent(ScareEventCp& eventCp) {
 	if (!SendPicture(eventCp)) return false;
 	auto itr = _mapPicId.find(eventCp.file);
 	if (itr == _mapPicId.end()) return false;
-	_commandQueue.emplace_back(std::make_unique<AddEventCommand>(static_cast<std::uint8_t>(eventCp.target), itr->second, eventCp.id));
+	_commandQueue.emplace_back(std::make_unique<AddEventCommand>(static_cast<std::uint8_t>(
+			_addresses[eventCp.target].userId
+		), itr->second, eventCp.id));
 	return true;
 }
 

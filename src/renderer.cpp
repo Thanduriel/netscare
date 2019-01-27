@@ -15,6 +15,8 @@ ID3D11RenderTargetView* Device::m_backbuffer = nullptr;
 const DirectX::CommonStates* Device::m_commonStates = nullptr;
 const Effect* Device::m_effect = nullptr;
 const Texture* Device::m_texture = nullptr;
+Effect Device::m_previousEffect;
+Device::TextureState Device::m_previousTexState;
 
 HWND Device::m_windowHandle = 0;
 std::filesystem::path Device::m_resourcePath;
@@ -29,7 +31,7 @@ using namespace std;
 
 bool Device::Initialize()
 {
-	cout << "Creating Device & Swapchain" << endl;
+	Utils::Log().info("Initializing test device");
 
 
 	HWND hWnd = GetForegroundWindow();
@@ -61,14 +63,9 @@ bool Device::Initialize()
 	}
 
 
-	cout << "m_swapChain:			0x" << hex << m_swapChain << endl;
-	cout << "m_device:			0x" << hex << m_device << endl;
-	cout << "m_pContext:			0x" << hex << m_context << endl;
 
 	m_swapChainVtable = (DWORD_PTR*)m_swapChain;
 	m_swapChainVtable = (DWORD_PTR*)m_swapChainVtable[0];
-
-	cout << "m_swapChainVtable:		0x" << hex << m_swapChainVtable << endl;
 
 	return m_swapChainVtable;
 }
@@ -93,8 +90,9 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 
 	if (isReadingData)
 	{
-		if (dataTask.getState() != ReadTask<size_t*>::PENDING)
+		if (dataTask.getState() != ReadTask<uint8_t*>::PENDING)
 		{
+			Utils::Log().info("Received texture");
 			Utils::ResetInplace(sizeTask, &sizeBuffer, 1);
 			m_pipeNode.addTask(sizeTask);
 			isReadingData = false;
@@ -104,8 +102,9 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 	}
 	else
 	{
-		if (sizeTask.getState() != ReadTask<char*>::PENDING)
+		if (sizeTask.getState() != ReadTask<size_t*>::PENDING)
 		{
+			Utils::Log().info("Received data size: {}", sizeBuffer);
 			buffer.resize(sizeBuffer);
 			Utils::ResetInplace(dataTask, &buffer.front(), sizeBuffer);
 			m_pipeNode.addTask(dataTask);
@@ -121,17 +120,14 @@ HRESULT __stdcall Device::Present(IDXGISwapChain* This, UINT SyncInterval, UINT 
 
 void Device::SetEffect(const Effect& _effect)
 {
-	m_effect = &_effect;
-
 	m_context->IASetInputLayout(_effect.GetInputLayout());
 
 	// Set the vertex and pixel shaders that will be used to render this triangle.
-	m_context->VSSetShader(_effect.m_vertexShader, NULL, 0);
-	m_context->PSSetShader(_effect.m_pixelShader, NULL, 0);
+	m_context->VSSetShader(_effect.m_vertexShader, nullptr, 0);
+	m_context->PSSetShader(_effect.m_pixelShader, nullptr, 0);
 
 	m_context->PSSetSamplers(0, 1, &_effect.m_sampleState);
-	float factor[4] = { 1.f,1.f,1.f,1.f };
-	m_context->OMSetBlendState(_effect.m_blendState, factor, ~0); //D3D11_COLOR_WRITE_ENABLE_ALL & ~D3D11_COLOR_WRITE_ENABLE_ALPHA
+	m_context->OMSetBlendState(_effect.m_blendState, reinterpret_cast<const float*>(&_effect.m_factor), _effect.m_sampleMask); //D3D11_COLOR_WRITE_ENABLE_ALL & ~D3D11_COLOR_WRITE_ENABLE_ALPHA
 }
 
 DirectX::XMINT2 Device::GetBufferSize()
@@ -145,15 +141,22 @@ DirectX::XMINT2 Device::GetBufferSize()
 
 void Device::Draw()
 {
+	SaveCurrentState();
 
-	// Render the triangle.
 	SetEffect(*m_effect);
 	m_texture->Draw(m_context);
+
+	// restore previous state
+	SetEffect(m_previousEffect);
+	m_context->PSSetShaderResources(0, 1, &m_previousTexState.resourceView);
+	m_context->IASetVertexBuffers(0, 1, &m_previousTexState.buffer, &m_previousTexState.stride,
+		&m_previousTexState.offset);
+	m_context->IASetPrimitiveTopology(m_previousTexState.primitiveTopology);
 }
 
 void Device::InitializeParent(IDXGISwapChain* _this)
 {
-	Utils::Log().info("Initializing device");
+	Utils::Log().info("Initializing parent device");
 	//GET DEVICE
 	_this->GetDevice(__uuidof(ID3D11Device), (void**)&m_device);
 
@@ -178,8 +181,34 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 
 	const auto vs = m_resourcePath / L"../../shader/texture.vs";
 	const auto ps = m_resourcePath / L"../../shader/texture.ps";
-	Effect* effect = new Effect(m_device, vs.wstring().c_str(),ps.wstring().c_str());
+	m_effect = new Effect(m_device, vs.wstring().c_str(),ps.wstring().c_str());
 
 	m_texture = new Texture(m_device, (m_resourcePath / L"../../texture/bolt.dds").wstring().c_str(), -0.5f, -0.5f, 0.5f, 0.5f);
-	SetEffect(*effect);
+	Utils::Log().info("Finished parent device initialization");
+}
+
+void Device::SaveCurrentState()
+{
+	ID3D11VertexShader* vs = nullptr;
+	m_context->VSGetShader(&vs, nullptr, 0);
+	ID3D11PixelShader* ps = nullptr;
+	m_context->PSGetShader(&ps, nullptr, 0);
+
+	ID3D11InputLayout* layout = nullptr;
+	m_context->IAGetInputLayout(&layout);
+
+	ID3D11SamplerState* sampleState = nullptr;
+	m_context->PSGetSamplers(0, 1, &sampleState);
+
+	ID3D11BlendState* blendState = nullptr;
+	DirectX::XMFLOAT4 factor;
+	UINT sampleMask;
+	m_context->OMGetBlendState(&blendState, reinterpret_cast<float*>(&factor), &sampleMask);
+
+	m_previousEffect = Effect(vs, ps, layout, sampleState, blendState, factor, sampleMask);
+
+	m_context->IAGetPrimitiveTopology(&m_previousTexState.primitiveTopology);
+	m_context->IAGetVertexBuffers(0, 1, &m_previousTexState.buffer,
+		&m_previousTexState.stride, &m_previousTexState.offset);
+	m_context->PSGetShaderResources(0, 1, &m_previousTexState.resourceView);
 }

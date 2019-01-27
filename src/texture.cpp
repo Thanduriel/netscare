@@ -65,7 +65,7 @@ void Texture::Draw(ID3D11DeviceContext* _deviceContext) const
 
 void Texture::CreateBuffer(ID3D11Device* _d3dDevice, float _x1, float _y1, float _scaleX, float _scaleY)
 {
-	spdlog::info("Creating Texture vertex buffer");
+	Utils::Log().info("Creating Texture vertex buffer");
 	ID3D11Texture2D* tex = reinterpret_cast<ID3D11Texture2D*>(m_texture);
 	D3D11_TEXTURE2D_DESC desc;
 	tex->GetDesc(&desc);

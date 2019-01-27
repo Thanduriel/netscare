@@ -33,19 +33,30 @@ public:
 private:
 	static void Draw();
 	static void InitializeParent(IDXGISwapChain* _this);
+	// save the current shader pipline so that it can be restored later
+	static void SaveCurrentState();
 
 	// d3d11 environment
 	static ID3D11Device* m_device;
 	static ID3D11DeviceContext* m_context;
 	static IDXGISwapChain* m_swapChain;
 	static ID3D11RenderTargetView* m_backbuffer;
-
-	static HWND m_windowHandle;
 	
 	static const DirectX::CommonStates* m_commonStates;
 	static const Effect* m_effect;
 	static const Texture* m_texture;
+	static Effect m_previousEffect;
+	struct TextureState
+	{
+		D3D11_PRIMITIVE_TOPOLOGY primitiveTopology;
+		ID3D11Buffer* buffer;
+		ID3D11ShaderResourceView* resourceView;
+		unsigned stride;
+		unsigned offset;
+	};
+	static TextureState m_previousTexState;
 
+	static HWND m_windowHandle;
 	static std::filesystem::path m_resourcePath;
 
 	// hook related

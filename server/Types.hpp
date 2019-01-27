@@ -57,7 +57,7 @@ public:
 
 class Command {
 public:
-	enum TYPE { TRIGGEREVENT, ADD_USER, DOWNLAOD_PIC, ADDEVENT, UPDATE_TICKETS };
+	enum TYPE { TRIGGEREVENT, ADD_USER, DOWNLAOD_PIC, ADDEVENT, UPDATE_TICKETS, EXECUTE_EVENT };
 	enum DECODERESULT { DECODED, CORRUPTED };
 	TYPE GetType() const { return _type; }
 	DECODERESULT GetState() const { return _decodeState; }
@@ -72,7 +72,8 @@ protected:
 		"addUser",
 		"downloadPic",
 		"addEvent",
-		"updateTickets"
+		"updateTickets",
+		"executeEvent"
 	};
 	Command(TYPE type, bool state) : _type{ type }, _decodeState{ state ? DECODED : CORRUPTED } {}
 	DECODERESULT _decodeState;
@@ -160,6 +161,15 @@ public:
 	const std::size_t userAmt;
 	UpdateTicketsCommand(const Tickets& tik, std::uint8_t uId) : Command{ UPDATE_TICKETS, true }, tickest{ tik.GetTickets(uId) }, userAmt{ tik.GetUserSize() } {}
 	UpdateTicketsCommand(const std::uint8_t* tik, std::size_t amtUser) : Command{ UPDATE_TICKETS, true }, tickest{ tik }, userAmt{ amtUser } {}
+	unsigned long EncodeSize() const override;
+	void Encode(unsigned char* msg) const override;
+};
+
+class ExecutedCommand : public Command {
+	mutable unsigned long _idSize{ 0 };
+public:
+	const int eventId;
+	ExecutedCommand(int eventId) : Command{ EXECUTE_EVENT, true }, eventId{ eventId } {}
 	unsigned long EncodeSize() const override;
 	void Encode(unsigned char* msg) const override;
 };

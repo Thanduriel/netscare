@@ -110,6 +110,10 @@ std::unique_ptr<Command> Command::Decode(const ASNObject::ASNDecodeReturn& asn) 
 			|| asn.objects[1].GetType() != ASNObject::ASCISTRING
 			|| asn.objects[2].GetType() != ASNObject::OCTASTRING) return std::make_unique<Command>(DOWNLAOD_PIC);
 		return std::make_unique<LoadPictureCommand>(asn.objects[1].DecodeString(), asn.objects[2].GetDataSize(), asn.objects[2].GetRaw());
+	} else if (strcmp(type, Command::IDENTIFYER[EXECUTE_EVENT]) == 0) {
+		if (asn.len != 2
+			|| asn.objects[1].GetType() != ASNObject::INTEGER) return std::make_unique<Command>(EXECUTE_EVENT);
+		return std::make_unique<ExecutedCommand>(asn.objects[1].DecodeInteger());
 	}
 	return nullptr;
 }
@@ -200,5 +204,17 @@ void UpdateTicketsCommand::Encode(unsigned char* msg) const {
 	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
 	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
 	ASNObject::EncodeAsnPrimitives(tickest, tickest + userAmt, msg + offset);
+}
+
+unsigned long ExecutedCommand::EncodeSize() const {
+	if (_idSize && _size) return _size;
+	_idSize = ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	_size = _idSize + ASNObject::EncodingSize(eventId);
+	return _size;
+}
+void ExecutedCommand::Encode(unsigned char* msg) const {
+	unsigned long offset = _idSize ? _idSize : ASNObject::EncodingSize(Command::IDENTIFYER[GetType()]);
+	ASNObject::EncodeAsnPrimitives(Command::IDENTIFYER[GetType()], msg);
+	ASNObject::EncodeAsnPrimitives(eventId, msg + offset);
 }
 

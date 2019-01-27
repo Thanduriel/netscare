@@ -127,6 +127,7 @@ bool Client::SendPicture(ScareEventCp& eventCp) {
 		if (state == SUCCESS) 
 			_mapPicId.insert(std::make_pair(path.string(), picId));
 		eventCp.changeState(ScareEvent::STATE::SETTET);
+		eventBuffer.emplace_back(eventCp);
 		return true;
 	}
 	return false;
@@ -242,7 +243,19 @@ bool Client::Update() {
 		case Command::TYPE::TRIGGEREVENT:
 			MessageBox(NULL, "Event Trigger", "Action", MB_OK);
 			break;
-
+		case Command::TYPE::EXECUTE_EVENT: {
+			ExecutedCommand *ecm = dynamic_cast<ExecutedCommand*>(cmd.get());
+			if (!ecm) MessageBox(NULL, "Cant Parse Triggerd Event", "Parse Error", MB_OK | MB_ICONERROR);
+			else {
+				for (auto itr = eventBuffer.begin(); itr < eventBuffer.end(); ++itr) {
+					if (itr->id == ecm->eventId) {
+						itr->changeState(ScareEvent::EXECUTED);
+						eventBuffer.erase(itr);
+						break;
+					}
+				}
+			}
+		}	break;
 		case Command::TYPE::DOWNLAOD_PIC: {
 			LoadPictureCommand * lpc = dynamic_cast<LoadPictureCommand*>(cmd.get());
 			if (!lpc) MessageBox(NULL, "Download Picture", "Failed", MB_OK | MB_ICONERROR);

@@ -183,7 +183,7 @@ void Device::InitializeParent(IDXGISwapChain* _this)
 	const auto ps = m_resourcePath / L"../../shader/texture.ps";
 	m_effect = new Effect(m_device, vs.wstring().c_str(),ps.wstring().c_str());
 
-	m_texture = new Texture(m_device, (m_resourcePath / L"../../texture/bolt.dds").wstring().c_str(), -0.5f, -0.5f, 0.5f, 0.5f);
+	m_texture = new Texture(m_device, (m_resourcePath / L"../../texture/coding-logo.dds").wstring().c_str(), -0.5f, -0.5f, 1.f, 1.f);
 	Utils::Log().info("Finished parent device initialization");
 }
 

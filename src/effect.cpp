@@ -67,7 +67,7 @@ Effect::Effect(ID3D11Device* _device, const WCHAR* _vsFilename, const WCHAR* _ps
 	psBlob->Release();
 
 	m_sampleState = Device::GetCommonStates()->LinearWrap();
-	m_blendState = Device::GetCommonStates()->Additive();
+	m_blendState = Device::GetCommonStates()->AlphaBlend();
 }
 
 Effect::Effect(ID3D11VertexShader* _vs, ID3D11PixelShader* _ps, 

@@ -127,7 +127,7 @@ bool Client::SendPicture(ScareEventCp& eventCp) {
 		if (state == SUCCESS) 
 			_mapPicId.insert(std::make_pair(path.string(), picId));
 		eventCp.changeState(ScareEvent::STATE::SETTET);
-		eventBuffer.emplace_back(eventCp);
+		eventBuffer.emplace_back(&eventCp);
 		return true;
 	}
 	return false;
@@ -247,9 +247,9 @@ bool Client::Update() {
 			ExecutedCommand *ecm = dynamic_cast<ExecutedCommand*>(cmd.get());
 			if (!ecm) MessageBox(NULL, "Cant Parse Triggerd Event", "Parse Error", MB_OK | MB_ICONERROR);
 			else {
-				for (auto itr = eventBuffer.begin(); itr < eventBuffer.end(); ++itr) {
-					if (itr->id == ecm->eventId) {
-						itr->changeState(ScareEvent::EXECUTED);
+				for (std::vector<ScareEventCp*>::iterator itr = eventBuffer.begin(); itr < eventBuffer.end(); ++itr) {
+					if ((*itr)->id == ecm->eventId) {
+						(*itr)->changeState(ScareEvent::EXECUTED);
 						eventBuffer.erase(itr);
 						break;
 					}

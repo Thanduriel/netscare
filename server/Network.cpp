@@ -303,7 +303,7 @@ NetScareServer::RESPONDERRORS NetScareServer::UpdateStateResponde(const ASNObjec
 							continue;
 						}
 						_commandHistory.emplace_back(std::move(cmd), _users[uId].GetEvent(eId).target, uId);
-						_commandHistory
+						_commandHistory.emplace_back(std::make_unique<ExecutedCommand>(eId), uId, uId);
 						std::cout << "Trigger EventId " << eId << " from userId: " << static_cast<int>(uId) << '\n';
 					}
 				} break;
